@@ -77,7 +77,8 @@ cp mac/config.yaml.example mac/config.yaml
 The `writ` CLI manages all components via tmux:
 
 ```bash
-./writ start          # Start everything (icecast, stream, tunnel, music-gen, operator, listener)
+./writ start          # Start core streaming stack (icecast, stream, tunnel)
+./writ start all      # Start core + content daemons
 ./writ status         # Health check all components
 ./writ stop           # Stop everything
 ```
@@ -87,6 +88,7 @@ Start individual components:
 ./writ start icecast  # Icecast server
 ./writ start stream   # Streamer + API
 ./writ start tunnel   # Cloudflared tunnel
+./writ start content  # music-gen, operator, listener
 ./writ start operator # Claude Code maintenance loop
 ```
 

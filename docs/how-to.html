@@ -165,7 +165,8 @@ uv run python mac/content_generator/music_bumper_generator.py --all --min 5</cod
 
     <p>The <code>writ</code> CLI manages all components via tmux:</p>
 
-<pre><code>./writ start          # Start everything (icecast, stream, tunnel, music-gen, operator, listener)
+<pre><code>./writ start          # Start core streaming stack (icecast, stream, tunnel)
+./writ start all      # Start core + content daemons
 ./writ status         # Health check all components
 ./writ stop           # Stop everything</code></pre>
 
@@ -173,7 +174,8 @@ uv run python mac/content_generator/music_bumper_generator.py --all --min 5</cod
 
 <pre><code>./writ start icecast  # Icecast streaming server (:8000)
 ./writ start stream   # ezstream + feeder.py + API (:8001)
-./writ start tunnel   # cloudflared tunnel (optional)</code></pre>
+./writ start tunnel   # cloudflared tunnel (optional)
+./writ start content  # music-gen, operator, listener</code></pre>
 
     <p>Listen at <code>http://localhost:8000/stream</code>. The now-playing API
     runs at <code>http://localhost:8001/now-playing</code> as a daemon thread
