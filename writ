@@ -1,4 +1,4 @@
-#!/opt/homebrew/bin/bash
+#!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────
 # writ — WRIT-FM Radio Station CLI
 #
@@ -16,6 +16,11 @@
 #   Content:         music-gen, operator, listener
 #   Groups:          core, content, all
 # ──────────────────────────────────────────────────────────────
+if (( BASH_VERSINFO[0] < 4 )); then
+    echo "writ requires Bash 4+. Install Homebrew bash and put it before /bin in PATH." >&2
+    exit 2
+fi
+
 set -euo pipefail
 
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
