@@ -44,10 +44,27 @@ name_of() {
     esac
 }
 
+json_field() {
+    (
+        cd "$PROJECT_ROOT" && uv run python -c '
+import json
+import sys
+from pathlib import Path
+
+try:
+    value = json.loads(Path(sys.argv[1]).read_text()).get(sys.argv[2], "")
+except Exception:
+    value = ""
+
+print(value or "")
+' "$1" "$2"
+    )
+}
+
 # Resolve host from now_playing.json (kept up-to-date by feeder.py)
 HOST="WRIT-FM"
 if [ -f "$NOW_PLAYING" ]; then
-    H=$(python3 -c "import json,sys; print(json.load(open('$NOW_PLAYING')).get('host','') or '')" 2>/dev/null || true)
+    H=$(json_field "$NOW_PLAYING" host 2>/dev/null || true)
     [ -n "$H" ] && HOST="$H"
 fi
 
@@ -60,7 +77,7 @@ if [ -n "$CURRENT" ] && [ -f "$CURRENT" ]; then
     META_FILE="$(dirname "$CURRENT")/$STEM.json"
     # Bumpers ship sidecar JSON with a curated display_name; prefer it.
     if [ "$EXT" != "wav" ] && [ -f "$META_FILE" ]; then
-        DISPLAY=$(python3 -c "import json; print(json.load(open('$META_FILE')).get('display_name',''))" 2>/dev/null || true)
+        DISPLAY=$(json_field "$META_FILE" display_name 2>/dev/null || true)
         [ -n "$DISPLAY" ] && TITLE="$DISPLAY"
     fi
 else
