@@ -14,7 +14,8 @@
 
 set -u
 
-PROJECT_ROOT="/Volumes/K3/agent-working-space/projects/active/2025-12-29-radio-station"
+SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
+PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
 STATE_FILE="$PROJECT_ROOT/output/.current_track.txt"
 NOW_PLAYING="$PROJECT_ROOT/output/now_playing.json"
 

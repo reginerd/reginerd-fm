@@ -9,7 +9,8 @@
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
-    <string>/Volumes/K3/agent-working-space/projects/active/2025-12-29-radio-station/mac/operator_daemon.sh</string>
+    <string>-lc</string>
+    <string>cd "${WRIT_HOME:-$HOME/wvoid-fm}" &amp;&amp; exec bash mac/operator_daemon.sh</string>
   </array>
 
   <key>EnvironmentVariables</key>
