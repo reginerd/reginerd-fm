@@ -65,7 +65,7 @@ cd mac/content_generator && uv run python ledger.py add-decision --mode continui
 ```bash
 pgrep -af "ezstream.*radio.xml" || echo "STREAMER DOWN"
 pgrep -af "feeder.py" || echo "FEEDER DOWN"
-curl -sf http://localhost:8000/status-json.xsl | python3 -c "import sys,json; s=json.load(sys.stdin).get('icestats',{}).get('source',{}); print('SOURCE OK' if s else 'NO SOURCE')"
+curl -sf http://localhost:8000/status-json.xsl | uv run python -c "import sys,json; s=json.load(sys.stdin).get('icestats',{}).get('source',{}); print('SOURCE OK' if s else 'NO SOURCE')"
 curl -sf http://localhost:4009/health && echo "music-gen: UP" || echo "music-gen: DOWN"
 ```
 
@@ -151,7 +151,7 @@ LOGFILE="output/operator_$(date +%Y-%m-%d).log"
 echo "" >> "$LOGFILE"
 echo "## WRIT-FM $(date +%H:%M)" >> "$LOGFILE"
 echo "- Show: $(uv run python mac/schedule.py now 2>/dev/null | head -1)" >> "$LOGFILE"
-echo "- Stream: $(curl -sf http://localhost:8000/status-json.xsl | python3 -c "import sys,json; s=json.load(sys.stdin).get('icestats',{}).get('source',{}); print('UP,', s.get('listeners',0), 'listeners') if s else print('DOWN')" 2>/dev/null)" >> "$LOGFILE"
+echo "- Stream: $(curl -sf http://localhost:8000/status-json.xsl | uv run python -c "import sys,json; s=json.load(sys.stdin).get('icestats',{}).get('source',{}); print('UP,', s.get('listeners',0), 'listeners') if s else print('DOWN')" 2>/dev/null)" >> "$LOGFILE"
 cd mac/content_generator && uv run python talk_generator.py --status 2>/dev/null >> "$LOGFILE"
 ```
 
