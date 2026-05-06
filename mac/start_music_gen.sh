@@ -10,12 +10,9 @@
 
 set -euo pipefail
 
-MUSIC_GEN_DIR="${MUSIC_GEN_DIR:-$(cd "$(dirname "$0")/../../music-gen.server" 2>/dev/null && pwd || echo "")}"
-if [ -z "$MUSIC_GEN_DIR" ] || [ ! -d "$MUSIC_GEN_DIR" ]; then
-    echo "Warning: music-gen.server not found. Set MUSIC_GEN_DIR or clone it alongside this repo."
-    echo "  Expected: $(cd "$(dirname "$0")/../.." && pwd)/music-gen.server"
-fi
 RADIO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+MUSIC_GEN_DIR="${MUSIC_GEN_DIR:-$(cd "$RADIO_DIR/../music-gen.server" 2>/dev/null && pwd || echo "")}"
+EXPECTED_MUSIC_GEN_DIR="$(cd "$RADIO_DIR/.." && pwd)/music-gen.server"
 SESSION="writ"
 
 # Ensure writ tmux session exists
@@ -25,6 +22,12 @@ if ! tmux has-session -t "$SESSION" 2>/dev/null; then
 fi
 
 start_server() {
+    if [ -z "$MUSIC_GEN_DIR" ] || [ ! -d "$MUSIC_GEN_DIR" ]; then
+        echo "music-gen.server not found. Set MUSIC_GEN_DIR or clone it alongside this repo." >&2
+        echo "  Expected: $EXPECTED_MUSIC_GEN_DIR" >&2
+        return 1
+    fi
+
     # Kill any existing music-gen server
     pkill -f "kortexa-music-gen" 2>/dev/null || true
     pkill -f "uvicorn.*music_gen" 2>/dev/null || true
@@ -81,7 +84,11 @@ case "$MODE" in
     server)   start_server ;;
     operator|daemon) start_operator ;;
     listener) start_listener ;;
-    *)        start_server; start_operator; start_listener ;;
+    *)
+        start_server || echo "Skipping music-gen.server; starting operator/listener only." >&2
+        start_operator
+        start_listener
+        ;;
 esac
 
 echo ""
