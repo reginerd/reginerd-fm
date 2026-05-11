@@ -26,6 +26,7 @@ tts:
   temperature: 0.8    # Sampling temperature
 
 # Icecast streaming server
+# Per-station mounts and API ports live in config/stations.yaml.
 icecast:
   host: localhost
   port: 8000

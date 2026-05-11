@@ -16,6 +16,7 @@ from __future__ import annotations
 
 from dataclasses import dataclass, field
 from datetime import datetime, timedelta
+import os
 from pathlib import Path
 import re
 from typing import Any
@@ -423,7 +424,10 @@ def _cli() -> int:
     parser = argparse.ArgumentParser(description="WRIT-FM schedule tools")
     parser.add_argument(
         "--schedule",
-        default=str(Path(__file__).resolve().parents[1] / "config" / "schedule.yaml"),
+        default=os.environ.get(
+            "WRIT_SCHEDULE_PATH",
+            str(Path(__file__).resolve().parents[1] / "config" / "schedule.yaml"),
+        ),
         help="Path to schedule.yaml",
     )
     sub = parser.add_subparsers(dest="cmd", required=True)

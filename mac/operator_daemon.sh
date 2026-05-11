@@ -5,16 +5,17 @@
 set -euo pipefail
 
 RADIO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
+cd "$RADIO_DIR"
+eval "$(uv run python mac/station_config.py --env)"
 INTERVAL_SECONDS="${WRIT_OPERATOR_INTERVAL_SECONDS:-900}"
 
 ts() { date +%H:%M; }
 
-echo "[operator-daemon $(ts)] Starting. Interval: ${INTERVAL_SECONDS}s"
+echo "[operator-daemon $(ts)] Starting ${WRIT_CALL_SIGN:-WRIT-FM}. Interval: ${INTERVAL_SECONDS}s"
 
 while true; do
-    echo "[operator-daemon $(ts)] Running operator loop..."
+    echo "[operator-daemon $(ts)] Running ${WRIT_CALL_SIGN:-WRIT-FM} operator loop..."
     (
-        cd "$RADIO_DIR"
         ./run_operator.sh
     ) || echo "[operator-daemon $(ts)] operator pass exited with status $?; continuing"
     echo "[operator-daemon $(ts)] Sleeping ${INTERVAL_SECONDS}s..."

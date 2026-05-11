@@ -18,13 +18,15 @@ from typing import Any
 from ledger import ingest_messages, load_active_threads, read_events, recent_diary_entries
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SCHEDULE_PATH = PROJECT_ROOT / "config" / "schedule.yaml"
-OUTPUT_DIR = PROJECT_ROOT / "output" / "talk_segments"
-SHOW_LOG_DIR = PROJECT_ROOT / "output" / "show_logs"
-INTENT_DIR = PROJECT_ROOT / "output" / "operator_intents"
-
 sys.path.insert(0, str(PROJECT_ROOT / "mac"))
+from station_config import load_station_config  # noqa: E402
 from schedule import load_schedule, slot_key  # noqa: E402
+
+STATION = load_station_config()
+SCHEDULE_PATH = STATION.schedule_path
+OUTPUT_DIR = STATION.talk_dir
+SHOW_LOG_DIR = STATION.show_log_dir
+INTENT_DIR = STATION.intent_dir
 
 
 def read_json(path: Path) -> dict[str, Any]:
@@ -93,6 +95,12 @@ def build_operator_brief(min_segments: int = 3) -> dict[str, Any]:
 
     return {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "station": {
+            "station_id": STATION.id,
+            "call_sign": STATION.call_sign,
+            "agent": STATION.agent.kind,
+            "mount": STATION.stream.mount,
+        },
         "current_show": {
             "show_id": resolved.show_id,
             "show_name": resolved.name,
@@ -112,8 +120,10 @@ def build_operator_brief(min_segments: int = 3) -> dict[str, Any]:
 def format_operator_brief(brief: dict[str, Any]) -> str:
     current = brief["current_show"]
     lines = [
-        "=== WRIT-FM Operator Brief ===",
+        f"=== {brief.get('station', {}).get('call_sign', STATION.call_sign)} Operator Brief ===",
         f"Generated: {brief['generated_at']}",
+        f"Station id: {brief.get('station', {}).get('station_id', STATION.id)}",
+        f"Agent: {brief.get('station', {}).get('agent', STATION.agent.kind)}",
         "",
         f"Current: {current['show_name']} ({current['show_id']})",
         f"Host: {current['host']} | Focus: {current['topic_focus']}",

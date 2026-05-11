@@ -45,14 +45,16 @@ from helpers import (
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SCHEDULE_PATH = PROJECT_ROOT / "config" / "schedule.yaml"
-OUTPUT_DIR = PROJECT_ROOT / "output" / "talk_segments"
-SCRIPTS_DIR = PROJECT_ROOT / "output" / "scripts"
-SHOW_LOG_DIR = PROJECT_ROOT / "output" / "show_logs"
-MESSAGES_FILE = Path.home() / ".writ" / "messages.json"
-
 sys.path.insert(0, str(PROJECT_ROOT / "mac"))
+from station_config import load_station_config  # noqa: E402
 from schedule import load_schedule, StationSchedule, slot_key, parse_slot_key  # noqa: E402
+
+STATION = load_station_config()
+SCHEDULE_PATH = STATION.schedule_path
+OUTPUT_DIR = STATION.talk_dir
+SCRIPTS_DIR = STATION.scripts_dir
+SHOW_LOG_DIR = STATION.show_log_dir
+MESSAGES_FILE = STATION.messages_file
 
 sys.path.insert(0, str(Path(__file__).parent))
 from persona import build_host_prompt  # noqa: E402
@@ -130,7 +132,7 @@ Use vivid, sensory language. Make the listener hear what you're describing.
 Be specific with details but universal with feeling.
 Use [pause] for natural rhythm. Output ONLY the spoken words.""",
 
-    "station_id": """Write a 15-30 word station ID for WRIT-FM.
+    "station_id": """Write a 15-30 word station ID for {station_name}.
 Be cryptic but warm. Reference the frequency, the signal, the persistence of broadcasting.
 Output ONLY the spoken text. No quotes, headers, or explanations.""",
 
@@ -238,6 +240,55 @@ TOPIC_POOLS = {
         "Questions from the dark - what you've always wanted to know",
         "Dedications and confessions from the inbox",
         "Where are you listening from? - the geography of our audience",
+    ],
+    "debugging_culture": [
+        "What a stack trace is trying to confess",
+        "Why the hardest bugs only happen after midnight",
+        "The strange intimacy of reading another person's logs",
+        "How calm becomes infrastructure during an incident",
+        "The difference between fixing a bug and understanding it",
+    ],
+    "systems_dreams": [
+        "What machines remember after a restart",
+        "Queues as dreams the system has not processed yet",
+        "The emotional life of suspended state",
+        "Why clocks are the most fragile dependency",
+        "Cold boot as ritual, not reset",
+    ],
+    "software_craft": [
+        "The dignity of a small diff",
+        "Why readable code is a gift to strangers",
+        "Abstractions that earn their keep",
+        "The quiet discipline of deleting code",
+        "How maintenance becomes taste",
+    ],
+    "internet_history": [
+        "Protocols as forgotten social contracts",
+        "The fossil record inside old RFCs",
+        "Why obsolete systems rarely disappear",
+        "Compatibility as a moral choice",
+        "The human drama behind boring standards",
+    ],
+    "failure_analysis": [
+        "What changed? The first useful question",
+        "How small assumptions become large outages",
+        "Why blame destroys evidence",
+        "Monitoring as a promise to notice",
+        "The anatomy of a near miss",
+    ],
+    "tool_design": [
+        "The human is not the edge case",
+        "Friction as information, not inconvenience",
+        "Why good tools let people recover",
+        "Interfaces that teach patience or panic",
+        "The emotional cost of bad defaults",
+    ],
+    "technical_debate": [
+        "Ship now versus understand first",
+        "When pragmatism becomes technical debt",
+        "The tradeoff between clever and clear",
+        "How teams decide what good enough means",
+        "The politics hidden inside architecture choices",
     ],
 }
 
@@ -357,7 +408,7 @@ def generate_show_plan(
     messages = format_messages_for_prompt()
     now = datetime.now()
 
-    prompt = f"""You are planning the next episode of {show_name} on WRIT-FM.
+    prompt = f"""You are planning the next episode of {show_name} on {STATION.call_sign}.
 Host: {host_id}
 Description: {show_description}
 Focus: {topic_focus}
@@ -616,6 +667,7 @@ def build_generation_prompt(
     min_words, max_words = SEGMENT_WORD_TARGETS.get(segment_type, (550, 900))
 
     prompt_template = SEGMENT_PROMPTS.get(segment_type, SEGMENT_PROMPTS["deep_dive"])
+    prompt_template = prompt_template.replace("{station_name}", STATION.call_sign)
 
     # Handle special template vars
     if segment_type == "news_analysis":
@@ -877,6 +929,8 @@ def generate_segment(
     meta_path = SCRIPTS_DIR / f"talk_{segment_type}_{timestamp}.json"
     with open(meta_path, "w") as f:
         json.dump({
+            "station_id": STATION.id,
+            "station": STATION.call_sign,
             "type": segment_type,
             "show_id": show_id,
             "show_name": show_name,
@@ -899,6 +953,7 @@ def generate_segment(
 
     append_event({
         "id": event_id("seg", str(output_path), datetime.now().isoformat(timespec="seconds")),
+        "station_id": STATION.id,
         "type": "segment_generated",
         "time": datetime.now().isoformat(timespec="seconds"),
         "show_id": show_id,

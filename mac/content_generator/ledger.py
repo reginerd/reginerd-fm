@@ -11,14 +11,20 @@ from __future__ import annotations
 import argparse
 import hashlib
 import json
+import sys
 from datetime import datetime, timedelta
 from pathlib import Path
 from typing import Any
 
-WRIT_HOME = Path.home() / ".writ"
-LEDGER_PATH = WRIT_HOME / "station_ledger.jsonl"
-MESSAGES_FILE = WRIT_HOME / "messages.json"
-ACTIVE_THREADS_PATH = WRIT_HOME / "active_threads.json"
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT / "mac"))
+from station_config import load_station_config  # noqa: E402
+
+STATION = load_station_config()
+WRIT_HOME = STATION.home_dir
+LEDGER_PATH = STATION.ledger_path
+MESSAGES_FILE = STATION.messages_file
+ACTIVE_THREADS_PATH = STATION.active_threads_path
 
 
 def utcish_now() -> str:
@@ -99,6 +105,7 @@ def ingest_messages(show_id: str | None = None) -> int:
         expires = datetime.now() + timedelta(days=14 if quality == "substantive" else 3)
         event = {
             "id": eid,
+            "station_id": STATION.id,
             "type": "listener_message",
             "time": ts,
             "show_id": show_id,
@@ -152,6 +159,7 @@ def add_decision(summary: str, mode: str = "maintenance", show_id: str | None = 
     now = utcish_now()
     return append_event({
         "id": event_id("decision", now, mode, summary),
+        "station_id": STATION.id,
         "type": "operator_decision",
         "time": now,
         "show_id": show_id,
@@ -171,6 +179,7 @@ def add_diary(text: str, mode: str | None = None, tags: list[str] | None = None)
     now = utcish_now()
     return append_event({
         "id": event_id("diary", now, text[:120]),
+        "station_id": STATION.id,
         "type": "diary_entry",
         "time": now,
         "mode": mode,

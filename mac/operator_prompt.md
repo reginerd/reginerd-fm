@@ -1,6 +1,6 @@
-# WRIT-FM Operator Session
+# Station Operator Session
 
-You are the operator for WRIT-FM, a 24/7 music-forward internet radio station.
+You are the operator for the configured station shown in the operator brief.
 This is a recurring maintenance session. Your job is to keep content stocked and
 preserve the station's editorial continuity.
 
@@ -14,15 +14,16 @@ Priorities, in order:
 
 ## How the Station Works
 
-ezstream streams audio to Icecast. feeder.py builds playlists from files in
-**slot folders** — `output/talk_segments/{show_id}/{YYYY-MM-DD_HHMM}/` —
+ezstream streams audio to Icecast. feeder.py builds playlists from files under
+the station's configured output directory. Spoken content lives in
+**slot folders** — `$WRIT_TALK_DIR/{show_id}/{YYYY-MM-DD_HHMM}/` —
 where `HHMM` is the airing's start time. Each airing gets its own folder;
 content only plays during that specific airing. When the airing ends, the
-whole slot folder is archived to `output/archive/{show_id}/{slot}/` and never
+whole slot folder is archived to `$WRIT_ARCHIVE_DIR/{show_id}/{slot}/` and never
 plays again. As each track finishes, it's moved to `{slot}/aired/` so a crash
 mid-slot doesn't replay what already aired.
 
-Bumpers (`output/music_bumpers/{show_id}/`) are a **shared pool** — not
+Bumpers (`$WRIT_BUMPER_DIR/{show_id}/`) are a **shared pool** — not
 slot-scoped. The playlist should feel like music with occasional hosted breaks,
 not a talk show with musical padding.
 
@@ -49,9 +50,9 @@ If generating a specific segment from editorial judgment, create an intent card:
 ```bash
 cd mac/content_generator && uv run python context.py --write-intent-template
 ```
-Edit the created JSON in `output/operator_intents/`, then pass it to the generator:
+Edit the created JSON in `$WRIT_INTENT_DIR/`, then pass it to the generator:
 ```bash
-cd mac/content_generator && uv run python talk_generator.py --intent ../../output/operator_intents/<file>.json --count 1
+cd mac/content_generator && uv run python talk_generator.py --intent "$WRIT_INTENT_DIR/<file>.json" --count 1
 ```
 
 Intent cards are for taste: tone, threads to use, listener material to carry,
@@ -64,16 +65,16 @@ cd mac/content_generator && uv run python ledger.py add-decision --mode continui
 
 ### 1. Health Check
 ```bash
-pgrep -af "ezstream.*radio.xml" || echo "STREAMER DOWN"
+pgrep -af "ezstream.*$WRIT_RUNTIME_DIR/radio.xml" || echo "STREAMER DOWN"
 pgrep -af "feeder.py" || echo "FEEDER DOWN"
-curl -sf http://localhost:8000/status-json.xsl | uv run python -c "import sys,json; s=json.load(sys.stdin).get('icestats',{}).get('source',{}); print('SOURCE OK' if s else 'NO SOURCE')"
+curl -sf "$ICECAST_STATUS_URL" | uv run python -c "import os,sys,json,urllib.parse; mount=os.environ.get('WRIT_ICECAST_MOUNT'); src=json.load(sys.stdin).get('icestats',{}).get('source',{}); sources=src if isinstance(src,list) else [src] if src else []; ok=any(urllib.parse.urlparse(str(s.get('listenurl',''))).path==mount or s.get('mount')==mount for s in sources); print('SOURCE OK' if ok else 'NO SOURCE')"
 curl -sf http://localhost:4009/health && echo "music-gen: UP" || echo "music-gen: DOWN"
 ```
 
 If stream is down:
 ```bash
-pkill -f ezstream; pkill -f feeder
-tmux send-keys -t writ:stream "uv run python mac/feeder.py --start-ezstream" Enter
+pkill -f "ezstream.*$WRIT_RUNTIME_DIR/radio.xml"
+tmux send-keys -t "writ:${WRIT_STATION_ID}-stream" "WRIT_STATION_ID=$WRIT_STATION_ID uv run python mac/feeder.py --start-ezstream" Enter
 ```
 
 If Icecast is down:
@@ -135,7 +136,7 @@ If music-gen.server is down, skip bumper generation entirely.
 
 ### 4. Process Listener Messages
 ```bash
-cat ~/.writ/messages.json 2>/dev/null | jq '.[] | select(.read == false)' || echo "No messages"
+cat "$WRIT_MESSAGES_FILE" 2>/dev/null | jq '.[] | select(.read == false)' || echo "No messages"
 ```
 If unread messages exist:
 ```bash
@@ -150,11 +151,11 @@ cd mac/content_generator && uv run python ledger.py ingest-messages
 
 ### 5. Log Status
 ```bash
-LOGFILE="output/operator_$(date +%Y-%m-%d).log"
+LOGFILE="$WRIT_OUTPUT_DIR/operator_$(date +%Y-%m-%d).log"
 echo "" >> "$LOGFILE"
-echo "## WRIT-FM $(date +%H:%M)" >> "$LOGFILE"
+echo "## $WRIT_CALL_SIGN $(date +%H:%M)" >> "$LOGFILE"
 echo "- Show: $(uv run python mac/schedule.py now 2>/dev/null | head -1)" >> "$LOGFILE"
-echo "- Stream: $(curl -sf http://localhost:8000/status-json.xsl | uv run python -c "import sys,json; s=json.load(sys.stdin).get('icestats',{}).get('source',{}); print('UP,', s.get('listeners',0), 'listeners') if s else print('DOWN')" 2>/dev/null)" >> "$LOGFILE"
+echo "- Stream: $(curl -sf http://localhost:${WRIT_NOW_PLAYING_PORT}/health | jq -r '.status + \" \" + .mount' 2>/dev/null || echo DOWN)" >> "$LOGFILE"
 cd mac/content_generator && uv run python talk_generator.py --status 2>/dev/null >> "$LOGFILE"
 ```
 
@@ -196,14 +197,14 @@ root or substitute the path you cd'd from at the start of this run.)
 
 ## Key Files
 - `mac/feeder.py` — Playlist feeder (manages ezstream, builds playlists, API)
-- `mac/radio.xml` — ezstream config (Icecast connection, Ogg encoding)
+- `$WRIT_RUNTIME_DIR/radio.xml` — generated ezstream config for this station
 - `mac/schedule.py` — Schedule parser and resolver
 - `config/schedule.yaml` — Weekly show schedule (8 talk shows)
-- `mac/content_generator/talk_generator.py` — Talk segment generator (Claude + Kokoro)
+- `mac/content_generator/talk_generator.py` — Talk segment generator (station agent + Kokoro)
 - `mac/content_generator/music_bumper_generator.py` — AI music bumper generator (ACE-Step)
 - `mac/content_generator/persona.py` — Multi-host persona system
-- `output/talk_segments/{show_id}/` — Generated talk segments per show
-- `output/music_bumpers/{show_id}/` — Pre-generated AI music tracks per show
+- `$WRIT_TALK_DIR/{show_id}/` — Generated talk segments per show
+- `$WRIT_BUMPER_DIR/{show_id}/` — Pre-generated AI music tracks per show
 
 ## Schedule
 **Daily:**

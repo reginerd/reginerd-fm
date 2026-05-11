@@ -12,19 +12,25 @@ Usage:
 """
 
 import argparse
+import fcntl
 import json
 import random
+import subprocess
 import sys
 import time
+from contextlib import contextmanager
 from datetime import datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT / "mac"))
 
+from station_config import load_station_config  # noqa: E402
 from music_gen_client import MUSIC_GEN_BASE_URL, generate_music, is_server_available  # noqa: E402
 
-BUMPERS_DIR = PROJECT_ROOT / "output" / "music_bumpers"
+STATION = load_station_config()
+BUMPERS_DIR = STATION.bumper_dir
+LOCK_PATH = STATION.output_dir / ".music_bumper_generator.lock"
 
 # Per-show music pools — mix of instrumental and vocal tracks.
 # Each entry is either a plain caption string (instrumental) or a dict with
@@ -280,10 +286,52 @@ _EXPANDED = {
 for _show_id, _new_pool in _EXPANDED.items():
     SHOW_MUSIC[_show_id].extend(_new_pool)
 
+CDEX_MUSIC_ALIASES = {
+    "stack_trace_after_dark": "midnight_signal",
+    "cold_boot_reverie": "the_night_garden",
+    "morning_diff": "dawn_chorus",
+    "protocol_archaeology": "sonic_archaeology",
+    "regression_report": "signal_report",
+    "human_factors": "the_groove_lab",
+    "merge_conflict": "crosswire",
+    "open_issue_hours": "listener_hours",
+}
+for _cdex_show_id, _source_show_id in CDEX_MUSIC_ALIASES.items():
+    SHOW_MUSIC.setdefault(_cdex_show_id, list(SHOW_MUSIC[_source_show_id]))
+
 # Duration range for bumpers (seconds)
 BUMPER_MIN = 120.0
 BUMPER_MAX = 240.0
 BUMPER_STOCK_MIN = 20
+GENERATE_ATTEMPTS = 3
+
+
+@contextmanager
+def generation_lock():
+    """Serialize access to the single music-gen backend across operator/manual runs."""
+    LOCK_PATH.parent.mkdir(parents=True, exist_ok=True)
+    with LOCK_PATH.open("w") as lock_file:
+        fcntl.flock(lock_file, fcntl.LOCK_EX)
+        try:
+            yield
+        finally:
+            fcntl.flock(lock_file, fcntl.LOCK_UN)
+
+
+def ensure_music_gen_available(verbose: bool = True) -> bool:
+    """Start music-gen through the station CLI if it is not reachable."""
+    if is_server_available():
+        return True
+    if verbose:
+        print("  music-gen unavailable; starting backend...")
+    result = subprocess.run(
+        [str(PROJECT_ROOT / "writ"), "start", "music-gen"],
+        cwd=PROJECT_ROOT,
+        check=False,
+    )
+    if result.returncode != 0:
+        return False
+    return is_server_available(timeout=10.0)
 
 
 def _display_name(caption: str) -> str:
@@ -346,13 +394,25 @@ def generate_one_bumper(show_id: str, verbose: bool = True) -> bool:
 
     start = time.perf_counter()
     guidance = round(random.uniform(4.0, 10.0), 1)
-    ok = generate_music(caption, audio_path, duration=duration,
-                        instrumental=instrumental, lyrics=lyrics,
-                        guidance_scale=guidance)
+    ok = False
+    for attempt in range(1, GENERATE_ATTEMPTS + 1):
+        if attempt > 1 and verbose:
+            print(f"  retrying {show_id} ({attempt}/{GENERATE_ATTEMPTS})...")
+        if not ensure_music_gen_available(verbose=verbose):
+            time.sleep(5)
+            continue
+        ok = generate_music(caption, audio_path, duration=duration,
+                            instrumental=instrumental, lyrics=lyrics,
+                            guidance_scale=guidance)
+        if ok:
+            break
+        time.sleep(5)
     elapsed = time.perf_counter() - start
 
     if ok:
         meta = {
+            "station_id": STATION.id,
+            "station": STATION.call_sign,
             "show_id": show_id,
             "caption": caption,
             "display_name": _display_name(caption),
@@ -403,24 +463,25 @@ def main():
         print("  cd /path/to/music-gen.server && uv run uvicorn src.kortexa.music_gen.server:app --port 4009")
         sys.exit(1)
 
-    if args.all:
-        for show_id in SHOW_MUSIC:
-            current = bumper_count(show_id)
-            if current >= args.min:
-                print(f"  {show_id}: {current} bumpers (OK)")
-                continue
-            needed = args.min - current
-            print(f"\nGenerating {needed} bumpers for {show_id} (have {current})...")
-            generate_bumpers_for_show(show_id, count=needed)
-        return
+    with generation_lock():
+        if args.all:
+            for show_id in SHOW_MUSIC:
+                current = bumper_count(show_id)
+                if current >= args.min:
+                    print(f"  {show_id}: {current} bumpers (OK)")
+                    continue
+                needed = args.min - current
+                print(f"\nGenerating {needed} bumpers for {show_id} (have {current})...")
+                generate_bumpers_for_show(show_id, count=needed)
+            return
 
-    if args.show:
-        if args.show not in SHOW_MUSIC:
-            print(f"Unknown show '{args.show}'. Valid shows: {', '.join(SHOW_MUSIC)}")
-            sys.exit(1)
-        total = generate_bumpers_for_show(args.show, count=args.count)
-        print(f"\nGenerated {total}/{args.count} bumpers for {args.show}")
-        return
+        if args.show:
+            if args.show not in SHOW_MUSIC:
+                print(f"Unknown show '{args.show}'. Valid shows: {', '.join(SHOW_MUSIC)}")
+                sys.exit(1)
+            total = generate_bumpers_for_show(args.show, count=args.count)
+            print(f"\nGenerated {total}/{args.count} bumpers for {args.show}")
+            return
 
     parser.print_help()
 

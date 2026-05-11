@@ -9,12 +9,19 @@ import os
 import re
 import shutil
 import subprocess
+import sys
 import time
 import urllib.parse
 import urllib.request
 import xml.etree.ElementTree as ET
 from datetime import datetime
 from pathlib import Path
+
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
+sys.path.insert(0, str(PROJECT_ROOT / "mac"))
+from station_config import load_station_config  # noqa: E402
+
+STATION = load_station_config()
 
 DEFAULT_NEWS_FEEDS = (
     "https://feeds.bbci.co.uk/news/rss.xml",
@@ -81,25 +88,48 @@ def run_claude(
     min_length: int = 0,
     strip_quotes: bool = True,
 ) -> str | None:
-    args = ["claude", "-p", prompt]
-    if model:
-        args.extend(["--model", model])
+    if STATION.agent.kind == "codex":
+        args = [
+            STATION.agent.command,
+            "exec",
+            "-C",
+            str(PROJECT_ROOT),
+            "-s",
+            "danger-full-access",
+            "--color",
+            "never",
+            "--ephemeral",
+        ]
+        if model:
+            args.extend(["--model", model])
+        args.append(prompt)
+    else:
+        args = [STATION.agent.command, *STATION.agent.args, "-p", prompt]
+        if model:
+            args.extend(["--model", model])
 
     try:
         result = subprocess.run(
             args,
             capture_output=True,
+            stdin=subprocess.DEVNULL,
             text=True,
             timeout=timeout,
         )
     except subprocess.TimeoutExpired:
-        log("Claude timed out")
+        log(f"{STATION.agent.kind} timed out")
         return None
     except Exception as exc:
-        log(f"Claude error: {exc}")
+        log(f"{STATION.agent.kind} error: {exc}")
         return None
 
-    if result.returncode != 0 or not result.stdout.strip():
+    if result.returncode != 0:
+        stderr = result.stderr.strip().splitlines()
+        if stderr:
+            log(f"{STATION.agent.kind} failed: {stderr[-1]}")
+        return None
+
+    if not result.stdout.strip():
         return None
 
     script = clean_claude_output(result.stdout, strip_quotes=strip_quotes)

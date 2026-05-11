@@ -8,11 +8,15 @@ Uses SQLite for persistent storage.
 
 import json
 import sqlite3
+import sys
 from pathlib import Path
 from typing import Optional
 
+sys.path.insert(0, str(Path(__file__).resolve().parent))
+from station_config import load_station_config  # noqa: E402
+
 # Default database location
-DEFAULT_DB_PATH = Path.home() / ".writ" / "history.db"
+DEFAULT_DB_PATH = load_station_config().history_db_path
 
 
 class PlayHistory:

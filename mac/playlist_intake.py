@@ -26,8 +26,12 @@ import sys
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-PLAYLIST_PATH = PROJECT_ROOT / "output" / ".playlist.m3u"
-CURRENT_TRACK_FILE = PROJECT_ROOT / "output" / ".current_track.txt"
+sys.path.insert(0, str(Path(__file__).parent))
+from station_config import load_station_config  # noqa: E402
+
+STATION = load_station_config()
+PLAYLIST_PATH = STATION.playlist_file
+CURRENT_TRACK_FILE = STATION.current_track_file
 SLOT_RE = re.compile(r"^\d{4}-\d{2}-\d{2}_\d{4}$")
 
 

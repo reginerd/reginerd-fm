@@ -13,7 +13,9 @@
 #
 # Components:
 #   Core (default):  icecast, stream, tunnel
+#   Public API:      api
 #   Content:         music-gen, operator, listener
+#   Relays:          caster
 #   Groups:          core, content, all
 # ──────────────────────────────────────────────────────────────
 if (( BASH_VERSINFO[0] < 4 )); then
@@ -28,29 +30,55 @@ MUSIC_GEN_DIR="${MUSIC_GEN_DIR:-}"
 [[ -z "$MUSIC_GEN_DIR" && -d "$PROJECT_ROOT/../music-gen.server" ]] && \
     MUSIC_GEN_DIR="$(cd "$PROJECT_ROOT/../music-gen.server" && pwd)"
 
+STATION_ID="${WRIT_STATION_ID:-}"
+if [[ "${1:-}" == "--station" || "${1:-}" == "-S" ]]; then
+    STATION_ID="${2:-}"
+    [[ -z "$STATION_ID" ]] && { echo "--station requires a station id" >&2; exit 2; }
+    shift 2
+fi
+[[ -z "$STATION_ID" ]] && STATION_ID="$(cd "$PROJECT_ROOT" && uv run python mac/station_config.py)"
+export WRIT_STATION_ID="$STATION_ID"
+station_field() {
+    (cd "$PROJECT_ROOT" && WRIT_STATION_ID="$STATION_ID" uv run python mac/station_config.py --field "$1")
+}
+STATION_CALL_SIGN="$(station_field call_sign)"
+STATION_API_PORT="$(station_field stream.api_port)"
+STATION_MOUNT="$(station_field stream.mount)"
+STATION_SUFFIX="${STATION_ID//[^a-zA-Z0-9]/-}"
+PUBLIC_API_STATION_ID="${WRIT_PUBLIC_API_STATION_ID:-writ-fm}"
+PUBLIC_API_PORT="$(
+    cd "$PROJECT_ROOT" && WRIT_STATION_ID="$PUBLIC_API_STATION_ID" uv run python mac/station_config.py --field stream.api_port
+)"
+
 SESSION="writ"
 
 CORE_COMPONENTS=(icecast stream tunnel)
+API_COMPONENTS=(api)
 CONTENT_COMPONENTS=(music-gen operator listener)
-ALL_COMPONENTS=("${CORE_COMPONENTS[@]}" "${CONTENT_COMPONENTS[@]}")
+RELAY_COMPONENTS=(caster)
+ALL_COMPONENTS=("${CORE_COMPONENTS[@]}" "${API_COMPONENTS[@]}" "${CONTENT_COMPONENTS[@]}" "${RELAY_COMPONENTS[@]}")
 
 declare -A COMP_PORT=(
-    [icecast]=8000 [stream]=8001 [tunnel]=""
+    [icecast]=8000 [stream]="$STATION_API_PORT" [tunnel]="" [api]="$PUBLIC_API_PORT" [caster]=""
     [music-gen]=4009 [operator]="" [listener]=""
 )
 declare -A COMP_HEALTH_URL=(
     [icecast]="http://localhost:8000/status-json.xsl"
-    [stream]="http://localhost:8001/now-playing" [tunnel]=""
+    [stream]="http://localhost:${STATION_API_PORT}/now-playing" [tunnel]=""
+    [api]="http://localhost:${PUBLIC_API_PORT}/health"
+    [caster]=""
     [music-gen]="http://localhost:4009/health" [operator]="" [listener]=""
 )
 declare -A COMP_PGREP=(
     [icecast]="icecast" [stream]="feeder.py"
-    [tunnel]="cloudflared.*wvoid" [music-gen]="music.gen"
+    [tunnel]="cloudflared.*wvoid" [api]="mac/api_server.py"
+    [caster]="mac/caster_relay.sh|ffmpeg.*sapircast.caster.fm.*wt6w8"
+    [music-gen]="music.gen"
     [operator]="operator_daemon" [listener]="listener_daemon"
 )
 declare -A COMP_WAIT=(
-    [icecast]=30 [stream]=10 [tunnel]=10
-    [music-gen]=180 [operator]=10 [listener]=10
+    [icecast]=30 [stream]=10 [tunnel]=10 [api]=10
+    [caster]=10 [music-gen]=180 [operator]=10 [listener]=10
 )
 
 # ── Colors ───────────────────────────────────────────────────
@@ -82,14 +110,62 @@ window_exists() {
 
 send_cmd() { local w="$1"; shift; tmux send-keys -t "$SESSION:$w" "$*" Enter; }
 
+is_station_scoped() {
+    case "$1" in stream|operator|listener) return 0 ;; *) return 1 ;; esac
+}
+
+component_window() {
+    if is_station_scoped "$1"; then
+        echo "${STATION_ID}-${1}"
+    else
+        echo "$1"
+    fi
+}
+
+set_tmux_env_if_present() {
+    local name="$1"
+    if [[ -n "${!name:-}" ]]; then
+        tmux set-environment -t "$SESSION" "$name" "${!name}"
+    fi
+}
+
 # ── health checks ────────────────────────────────────────────
 
 check_port()    { curl -sf --max-time 3 "$1" >/dev/null 2>&1; }
 check_process() { pgrep -f "$1" >/dev/null 2>&1; }
+listening_pids() {
+    local port="$1"
+    [[ -z "$port" ]] && return 0
+    lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null || true
+}
+port_has_listener() {
+    local port="$1"
+    [[ -n "$port" && -n "$(listening_pids "$port")" ]]
+}
 
 is_healthy() {
     local url="${COMP_HEALTH_URL[$1]}" pat="${COMP_PGREP[$1]}"
+    if [[ "$1" == "stream" ]]; then
+        check_process "feeder.py --station ${STATION_ID}" && check_port "$url"
+        return
+    fi
+    if is_station_scoped "$1" && [[ "$1" != "stream" ]]; then
+        window_exists "$(component_window "$1")"
+        return
+    fi
     if [[ -n "$url" ]]; then check_port "$url"; else check_process "$pat"; fi
+}
+
+port_is_public_api_only() {
+    local port="$1" pids pid cmd
+    pids="$(listening_pids "$port")"
+    [[ -n "$pids" ]] || return 1
+    while IFS= read -r pid; do
+        [[ -n "$pid" ]] || continue
+        cmd="$(ps -p "$pid" -o command= 2>/dev/null || true)"
+        [[ "$cmd" == *"mac/api_server.py"* ]] || return 1
+    done <<< "$pids"
+    return 0
 }
 
 wait_for_healthy() {
@@ -115,34 +191,55 @@ get_start_cmd() {
             [[ -z "$icecast_bin" ]] && \
                 { err "icecast not found. Install icecast or set ICECAST_BIN."; return 1; }
             echo "'$icecast_bin' -c '$PROJECT_ROOT/config/icecast.xml'" ;;
-        stream)    echo "cd '$PROJECT_ROOT' && uv run python mac/feeder.py --start-ezstream" ;;
+        stream)    echo "cd '$PROJECT_ROOT' && WRIT_STATION_ID='$STATION_ID' uv run python mac/feeder.py --station '$STATION_ID' --start-ezstream" ;;
         tunnel)    echo "cloudflared tunnel run wvoid-radio" ;;
+        api)       echo "cd '$PROJECT_ROOT' && WRIT_STATION_ID='$PUBLIC_API_STATION_ID' uv run python mac/api_server.py" ;;
+        caster)    echo "cd '$PROJECT_ROOT' && bash mac/caster_relay.sh" ;;
         music-gen)
             [[ -z "$MUSIC_GEN_DIR" || ! -d "$MUSIC_GEN_DIR" ]] && \
                 { err "music-gen.server not found. Set MUSIC_GEN_DIR."; return 1; }
             echo "cd '$MUSIC_GEN_DIR' && LM_BACKEND=mlx PRELOAD_MODELS=1 ./run.sh" ;;
-        operator)  echo "cd '$PROJECT_ROOT' && unset CLAUDECODE && bash mac/operator_daemon.sh" ;;
-        listener)  echo "cd '$PROJECT_ROOT' && unset CLAUDECODE && bash mac/listener_daemon.sh" ;;
+        operator)  echo "cd '$PROJECT_ROOT' && unset CLAUDECODE && WRIT_STATION_ID='$STATION_ID' bash mac/operator_daemon.sh" ;;
+        listener)  echo "cd '$PROJECT_ROOT' && unset CLAUDECODE && WRIT_STATION_ID='$STATION_ID' bash mac/listener_daemon.sh" ;;
     esac
 }
 
 kill_port() {
     local port="$1"
     [[ -z "$port" ]] && return
-    lsof -ti ":$port" 2>/dev/null | while read -r pid; do
+    lsof -tiTCP:"$port" -sTCP:LISTEN 2>/dev/null | while read -r pid; do
         kill "$pid" 2>/dev/null && warn "killed stale process $pid on port $port"
     done || true
     sleep 1
 }
 
+keep_public_api_for_stopped_stream() {
+    local comp="$1" port="$2"
+    [[ "$comp" == "stream" && "$STATION_ID" == "$PUBLIC_API_STATION_ID" ]] \
+        && port_is_public_api_only "$port"
+}
+
+stop_component_port() {
+    local comp="$1" port="$2" context="$3"
+    port_has_listener "$port" || return 1
+    if keep_public_api_for_stopped_stream "$comp" "$port"; then
+        ok "$comp already stopped (public api remains on :$port)"
+        return 0
+    fi
+    kill_port "$port"
+    ok "$comp stopped ($context on :$port)"
+}
+
 start_one() {
     local comp="$1"
+    local win; win="$(component_window "$comp")"
 
     if is_healthy "$comp"; then ok "$comp already running"; return 0; fi
 
     # dependency checks
     case "$comp" in
         stream)  is_healthy icecast   || { err "start icecast first"; return 1; } ;;
+        caster)  is_healthy icecast   || { err "start icecast first"; return 1; } ;;
         operator) is_healthy music-gen || warn "music-gen is down; operator can still manage talk/messages" ;;
     esac
 
@@ -150,11 +247,30 @@ start_one() {
     local port="${COMP_PORT[$comp]}"
     [[ -n "$port" ]] && kill_port "$port"
 
-    local cmd; cmd="$(get_start_cmd "$comp")" || return 1
-    ensure_window "$comp"
-    send_cmd "$comp" "$cmd"
+    if [[ "$comp" == "caster" ]]; then
+        ensure_session
+        set_tmux_env_if_present CASTER_SOURCE_PASSWORD
+        set_tmux_env_if_present CASTER_PRIVATE_TOKEN
+        set_tmux_env_if_present CASTER_AUDIO_URL
+        set_tmux_env_if_present CASTER_AUDIO_HEALTH_URL
+        set_tmux_env_if_present CASTER_HOST
+        set_tmux_env_if_present CASTER_PORT
+        set_tmux_env_if_present CASTER_MOUNT
+        set_tmux_env_if_present CASTER_SOURCE_USER
+        set_tmux_env_if_present CASTER_BITRATE
+        set_tmux_env_if_present CASTER_CODEC
+        set_tmux_env_if_present CASTER_SAMPLE_RATE
+        set_tmux_env_if_present CASTER_STREAM_NAME
+        set_tmux_env_if_present CASTER_STREAM_GENRE
+        set_tmux_env_if_present CASTER_STREAM_DESCRIPTION
+        window_exists "$win" && tmux kill-window -t "$SESSION:$win" 2>/dev/null || true
+    fi
 
-    printf "  Starting $comp "
+    local cmd; cmd="$(get_start_cmd "$comp")" || return 1
+    ensure_window "$win"
+    send_cmd "$win" "$cmd"
+
+    printf "  Starting %s " "$comp"
     if wait_for_healthy "$comp"; then
         ok "$comp UP"; return 0
     else
@@ -168,21 +284,32 @@ start_music_gen_optional() {
 
 stop_one() {
     local comp="$1" pat="${COMP_PGREP[$1]}" port="${COMP_PORT[$1]}"
+    local win; win="$(component_window "$comp")"
 
-    if ! window_exists "$comp" && ! check_process "$pat"; then
-        # Still check for orphaned port holders
-        if [[ -n "$port" ]] && lsof -ti ":$port" >/dev/null 2>&1; then
-            kill_port "$port"
-            ok "$comp stopped (orphan on :$port)"
-            return 0
+    if is_station_scoped "$comp"; then
+        if ! window_exists "$win"; then
+            stop_component_port "$comp" "$port" "orphan" && return 0
+            ok "$comp already stopped"; return 0
         fi
+
+        tmux send-keys -t "$SESSION:$win" C-c 2>/dev/null || true
+        sleep 2
+        stop_component_port "$comp" "$port" "listener" || true
+        window_exists "$win" && { tmux kill-window -t "$SESSION:$win" 2>/dev/null || true; }
+        ok "$comp stopped"
+        return 0
+    fi
+
+    if ! window_exists "$win" && ! check_process "$pat"; then
+        # Still check for orphaned port holders
+        stop_component_port "$comp" "$port" "orphan" && return 0
         ok "$comp already stopped"; return 0
     fi
 
-    window_exists "$comp" && { tmux send-keys -t "$SESSION:$comp" C-c 2>/dev/null || true; sleep 2; }
+    window_exists "$win" && { tmux send-keys -t "$SESSION:$win" C-c 2>/dev/null || true; sleep 2; }
     check_process "$pat" && { pkill -f "$pat" 2>/dev/null || true; sleep 1; }
-    [[ -n "$port" ]] && lsof -ti ":$port" >/dev/null 2>&1 && kill_port "$port"
-    window_exists "$comp" && { tmux kill-window -t "$SESSION:$comp" 2>/dev/null || true; }
+    stop_component_port "$comp" "$port" "listener" || true
+    window_exists "$win" && { tmux kill-window -t "$SESSION:$win" 2>/dev/null || true; }
 
     ok "$comp stopped"
 }
@@ -192,18 +319,26 @@ stop_one() {
 cmd_start() {
     local target="${1:-core}"
     case "$target" in
+        stations|dual|duo)
+            log "Starting KLOD-FM and CDEX-FM streams..."
+            start_one icecast
+            start_one api
+            start_one tunnel
+            WRIT_STATION_ID=klod-fm "$0" start stream
+            WRIT_STATION_ID=cdex-fm "$0" start stream
+            echo ""; ok "KLOD-FM and CDEX-FM stream sources requested" ;;
         core)
-            log "Starting WRIT-FM core..."
+            log "Starting ${STATION_CALL_SIGN} core..."
             start_one icecast; start_one stream; start_one tunnel
-            echo ""; ok "WRIT-FM core up. tmux attach -t $SESSION" ;;
+            echo ""; ok "${STATION_CALL_SIGN} core up. tmux attach -t $SESSION" ;;
         content)
-            log "Starting content..."
+            log "Starting ${STATION_CALL_SIGN} content..."
             start_music_gen_optional; start_one operator; start_one listener ;;
         all)
-            log "Starting WRIT-FM (all)..."
+            log "Starting ${STATION_CALL_SIGN} (all)..."
             start_one icecast; start_one stream; start_one tunnel
             start_music_gen_optional; start_one operator; start_one listener
-            echo ""; ok "WRIT-FM up. tmux attach -t $SESSION" ;;
+            echo ""; ok "${STATION_CALL_SIGN} up. tmux attach -t $SESSION" ;;
         *)  validate_component "$target"; start_one "$target" ;;
     esac
 }
@@ -213,7 +348,7 @@ cmd_stop() {
     case "$target" in
         ""|all)
             log "Stopping all..."
-            for c in listener operator music-gen tunnel stream icecast; do stop_one "$c"; done
+            for c in caster listener operator music-gen tunnel stream api icecast; do stop_one "$c"; done
             local n; n=$(tmux list-windows -t "$SESSION" 2>/dev/null | wc -l | tr -d ' ')
             (( n <= 1 )) && { tmux kill-session -t "$SESSION" 2>/dev/null || true; } ;;
         core)    for c in tunnel stream icecast; do stop_one "$c"; done ;;
@@ -230,7 +365,7 @@ cmd_restart() {
 
 cmd_status() {
     echo ""
-    echo -e "  ${BOLD}WRIT-FM${NC}"
+    echo -e "  ${BOLD}${STATION_CALL_SIGN}${NC} ${DIM}(${STATION_ID}, ${STATION_MOUNT})${NC}"
     echo "  ────────────────────────────────────────────"
     printf "  ${BOLD}%-14s %-8s %-6s %-16s${NC}\n" "COMPONENT" "STATUS" "PORT" "WINDOW"
     echo "  ────────────────────────────────────────────"
@@ -242,7 +377,7 @@ cmd_status() {
         local st sc win
 
         if is_healthy "$comp"; then
-            st="UP"; sc="$GREEN"; win="$SESSION:$comp"
+            st="UP"; sc="$GREEN"; win="$SESSION:$(component_window "$comp")"
             for c in "${CORE_COMPONENTS[@]}"; do [[ "$c" == "$comp" ]] && core_up=$((core_up+1)); done
             for c in "${CONTENT_COMPONENTS[@]}"; do [[ "$c" == "$comp" ]] && content_up=$((content_up+1)); done
         else
@@ -256,23 +391,32 @@ cmd_status() {
     echo ""
 }
 
+cmd_status_all() {
+    local ids
+    ids="$(cd "$PROJECT_ROOT" && uv run python mac/station_config.py --ids)"
+    for sid in $ids; do
+        WRIT_STATION_ID="$sid" "$0" status
+    done
+}
+
 cmd_logs() {
     local comp="${1:-}"; [[ -z "$comp" ]] && { err "Usage: writ logs <component> [-f]"; exit 1; }
     validate_component "$comp"
+    local win; win="$(component_window "$comp")"
 
-    window_exists "$comp" || { err "$comp has no active window"; exit 1; }
+    window_exists "$win" || { err "$comp has no active window"; exit 1; }
 
     if [[ "${2:-}" == "-f" || "${2:-}" == "--follow" ]]; then
-        exec tmux attach -t "$SESSION:$comp"
+        exec tmux attach -t "$SESSION:$win"
     else
-        tmux capture-pane -t "$SESSION:$comp" -p -S -100
+        tmux capture-pane -t "$SESSION:$win" -p -S -100
     fi
 }
 
 cmd_attach() {
     local comp="${1:-}"
     if [[ -z "$comp" ]]; then exec tmux attach -t "$SESSION"
-    else validate_component "$comp"; exec tmux attach -t "$SESSION:$comp"; fi
+    else validate_component "$comp"; exec tmux attach -t "$SESSION:$(component_window "$comp")"; fi
 }
 
 cmd_generate() {
@@ -283,7 +427,10 @@ cmd_generate() {
             cd "$PROJECT_ROOT"
             exec uv run python mac/content_generator/talk_generator.py ${@:---all --count 2 --min 3} ;;
         music|bumper|bumpers)
-            is_healthy music-gen || warn "music-gen.server not running"
+            if ! is_healthy music-gen; then
+                warn "music-gen.server not running; starting it now"
+                start_one music-gen || { err "music-gen failed to start"; return 1; }
+            fi
             cd "$PROJECT_ROOT"
             exec uv run python mac/content_generator/music_bumper_generator.py ${@:---all --min 20} ;;
         status)
@@ -309,12 +456,14 @@ cmd_help() {
   writ stop [component]       Stop all or a specific component
   writ restart [component]    Restart
   writ status                 Health check all components
+  writ status all             Health check every configured station
   writ logs <component> [-f]  Show logs (-f for live)
   writ attach [component]     Attach to tmux window
   writ generate <talk|music>  Generate content (foreground)
 
-  Components:  icecast  stream  tunnel  music-gen  operator  listener
-  Groups:      core  content  all
+  Select station:  writ --station klod-fm start stream
+  Components:      icecast  stream  tunnel  api  caster  music-gen  operator  listener
+  Groups:          core  content  all  stations
 
 EOF
 }
@@ -325,7 +474,7 @@ case "$cmd" in
     start)   cmd_start "$@" ;;
     stop)    cmd_stop "$@" ;;
     restart) cmd_restart "$@" ;;
-    status)  cmd_status ;;
+    status)  if [[ "${1:-}" == "all" || "${1:-}" == "stations" ]]; then cmd_status_all; else cmd_status; fi ;;
     logs)    cmd_logs "$@" ;;
     attach)  cmd_attach "$@" ;;
     generate) cmd_generate "$@" ;;

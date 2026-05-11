@@ -6,13 +6,17 @@ from __future__ import annotations
 import argparse
 import html
 import json
+import sys
 from collections import defaultdict
 from datetime import datetime
 from pathlib import Path
 
-WRIT_HOME = Path.home() / ".writ"
-LEDGER_PATH = WRIT_HOME / "station_ledger.jsonl"
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
+sys.path.insert(0, str(PROJECT_ROOT / "mac"))
+from station_config import load_station_config  # noqa: E402
+
+STATION = load_station_config()
+LEDGER_PATH = STATION.ledger_path
 DEFAULT_HTML_OUTPUT = PROJECT_ROOT / "docs" / "diary.html"
 DEFAULT_JSON_OUTPUT = PROJECT_ROOT / "docs" / "diary.json"
 
@@ -74,14 +78,14 @@ def render(entries: list[dict]) -> str:
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Operator Diary &mdash; WRIT-FM</title>
+  <title>Operator Diary &mdash; {html.escape(STATION.call_sign)}</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="container">
 
     <nav>
-      <a href="index.html">WRIT-FM</a>
+      <a href="index.html">{html.escape(STATION.call_sign)}</a>
       <a href="how-to.html">How-To Guide</a>
       <a href="diary.html" class="active">Diary</a>
       <a href="https://github.com/keltokhy/writ-fm">GitHub</a>
@@ -100,7 +104,7 @@ def render(entries: list[dict]) -> str:
 {body}
 
     <footer>
-      <a href="index.html">WRIT-FM</a> &mdash; an experiment in autonomous broadcasting.
+      <a href="index.html">{html.escape(STATION.call_sign)}</a> &mdash; an experiment in autonomous broadcasting.
     </footer>
 
   </div>
@@ -110,7 +114,7 @@ def render(entries: list[dict]) -> str:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Render WRIT-FM operator diary to HTML and JSON")
+    parser = argparse.ArgumentParser(description="Render station operator diary to HTML and JSON")
     parser.add_argument("--html", type=Path, default=DEFAULT_HTML_OUTPUT,
                         help="HTML output path (default: docs/diary.html)")
     parser.add_argument("--json", type=Path, default=DEFAULT_JSON_OUTPUT,
@@ -125,6 +129,8 @@ def main() -> int:
     args.json.parent.mkdir(parents=True, exist_ok=True)
     feed = {
         "generated_at": datetime.now().isoformat(timespec="seconds"),
+        "station_id": STATION.id,
+        "station": STATION.call_sign,
         "count": len(entries),
         "entries": [
             {

@@ -16,8 +16,9 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-STATE_FILE="$PROJECT_ROOT/output/.current_track.txt"
-NOW_PLAYING="$PROJECT_ROOT/output/now_playing.json"
+CALL_SIGN="${WRIT_CALL_SIGN:-WRIT-FM}"
+STATE_FILE="${WRIT_CURRENT_TRACK_FILE:-$PROJECT_ROOT/output/.current_track.txt}"
+NOW_PLAYING="${WRIT_NOW_PLAYING_FILE:-$PROJECT_ROOT/output/now_playing.json}"
 
 CURRENT=""
 [ -f "$STATE_FILE" ] && CURRENT=$(cat "$STATE_FILE" 2>/dev/null || true)
@@ -38,7 +39,7 @@ name_of() {
         *music_essay*)       echo "Sonic Essay" ;;
         *show_intro*)        echo "Show Opening" ;;
         *show_outro*)        echo "Show Closing" ;;
-        *station_id*)        echo "WRIT-FM" ;;
+        *station_id*)        echo "$CALL_SIGN" ;;
         *bumper*)            echo "AI Music" ;;
         *)                   echo "Transmission" ;;
     esac
@@ -62,7 +63,7 @@ print(value or "")
 }
 
 # Resolve host from now_playing.json (kept up-to-date by feeder.py)
-HOST="WRIT-FM"
+HOST="$CALL_SIGN"
 if [ -f "$NOW_PLAYING" ]; then
     H=$(json_field "$NOW_PLAYING" host 2>/dev/null || true)
     [ -n "$H" ] && HOST="$H"
@@ -81,7 +82,7 @@ if [ -n "$CURRENT" ] && [ -f "$CURRENT" ]; then
         [ -n "$DISPLAY" ] && TITLE="$DISPLAY"
     fi
 else
-    TITLE="WRIT-FM"
+    TITLE="$CALL_SIGN"
 fi
 
 # Respond to ezstream's invocation mode

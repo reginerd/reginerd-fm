@@ -13,10 +13,13 @@ import socketserver
 import subprocess
 import threading
 import time
+import urllib.error
 import urllib.parse
 import urllib.request
 from datetime import datetime
 from pathlib import Path
+
+from station_config import load_station_config
 
 # Import play history
 try:
@@ -45,24 +48,38 @@ _discogs_cache: dict[str, dict | None] = {}
 _discogs_last_track: str | None = None
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
-MESSAGES_FILE = Path.home() / ".writ" / "messages.json"
-LEDGER_PATH = Path.home() / ".writ" / "station_ledger.jsonl"
+STATION = load_station_config()
+MESSAGES_FILE = STATION.messages_file
+LEDGER_PATH = STATION.ledger_path
 
 # Rate limiting for messages
 MESSAGE_COOLDOWN = 300  # 5 minutes between messages per IP
 last_message_times: dict[str, float] = {}
 _messages_lock = threading.Lock()
 
-PORT = int(os.environ.get("WRIT_NOW_PLAYING_PORT", "8001"))
+PORT = int(os.environ.get("WRIT_NOW_PLAYING_PORT", str(STATION.stream.api_port)))
 ICECAST_STATUS_URL = os.environ.get(
     "ICECAST_STATUS_URL",
-    "http://localhost:8000/status-json.xsl",
+    STATION.stream.status_url,
 )
+STATION_PROXY_ENDPOINTS = {
+    "now-playing",
+    "health",
+    "stats",
+    "schedule",
+    "history",
+    "messages",
+    "message",
+    "diary",
+    "discogs",
+    "qr",
+}
 
 # Shared state — set by start_api_thread()
 _track_info: dict = {}
 _encoder_getter = None
 _listener_fn = None
+_api_mode = "stream"
 
 # Server start time for uptime tracking
 SERVER_START_TIME = time.time()
@@ -88,20 +105,37 @@ class NowPlayingHandler(http.server.BaseHTTPRequestHandler):
         parsed = urllib.parse.urlparse(self.path)
         path = parsed.path.rstrip("/") or "/"
 
+        station_route = parse_station_route(path)
+        if station_route:
+            station_id, station_path = station_route
+            self._proxy_station_request(station_id, station_path, parsed.query)
+        elif self._handle_local_get(path, parsed):
+            return
+        else:
+            self.send_response(404)
+            self.end_headers()
+
+    def _handle_local_get(self, path: str, parsed: urllib.parse.ParseResult) -> bool:
         if path in ("/now-playing", "/"):
             data = get_now_playing()
             track_stats_update(data)
             self._send_json(data, "no-cache, no-store, must-revalidate")
+            return True
         elif path == "/health":
             self._send_json(get_health_status())
+            return True
         elif path == "/stats":
             self._send_json(get_stats())
+            return True
         elif path == "/schedule":
             self._send_json(get_schedule_info())
+            return True
         elif path == "/history":
             self._send_json(get_play_history())
+            return True
         elif path == "/messages":
             self._send_json(get_messages())
+            return True
         elif path == "/diary":
             qs = urllib.parse.parse_qs(parsed.query)
             limit = None
@@ -111,8 +145,10 @@ class NowPlayingHandler(http.server.BaseHTTPRequestHandler):
                 except ValueError:
                     limit = None
             self._send_json(get_diary(limit=limit), "public, max-age=60")
+            return True
         elif path == "/discogs":
             self._send_json(get_discogs_info())
+            return True
         elif path == "/qr":
             qr_bytes = get_qr_code()
             if qr_bytes:
@@ -134,9 +170,72 @@ class NowPlayingHandler(http.server.BaseHTTPRequestHandler):
                     self.wfile.write(json.dumps({"error": "No Discogs info available"}).encode())
                 except BrokenPipeError:
                     pass
+            return True
         else:
-            self.send_response(404)
+            return False
+
+    def _proxy_station_request(
+        self,
+        station_id: str,
+        path: str,
+        query: str = "",
+        method: str = "GET",
+        body: bytes | None = None,
+        content_type: str | None = None,
+    ):
+        try:
+            station = load_station_config(station_id)
+        except KeyError:
+            return self._send_error(404, f"Unknown station: {station_id}")
+
+        if station.stream.api_port == PORT:
+            parsed = urllib.parse.urlparse(f"{path}?{query}" if query else path)
+            if method == "GET" and self._handle_local_get(path, parsed):
+                return
+            if method == "POST" and path == "/message":
+                return self._handle_message_body(body or b"")
+            return self._send_error(404, "Unknown endpoint")
+
+        target = f"http://127.0.0.1:{station.stream.api_port}{path}"
+        if query:
+            target = f"{target}?{query}"
+
+        headers = {}
+        if content_type:
+            headers["Content-Type"] = content_type
+
+        try:
+            request = urllib.request.Request(
+                target,
+                data=body if method == "POST" else None,
+                headers=headers,
+                method=method,
+            )
+            with urllib.request.urlopen(request, timeout=3) as response:
+                payload = response.read()
+                self.send_response(response.status)
+                self.send_header("Content-Type", response.headers.get("Content-Type", "application/json"))
+                self.send_header("Access-Control-Allow-Origin", "*")
+                cache_control = response.headers.get("Cache-Control")
+                if cache_control:
+                    self.send_header("Cache-Control", cache_control)
+                self.end_headers()
+                try:
+                    self.wfile.write(payload)
+                except BrokenPipeError:
+                    pass
+        except urllib.error.HTTPError as e:
+            payload = e.read()
+            self.send_response(e.code)
+            self.send_header("Content-Type", e.headers.get("Content-Type", "application/json"))
+            self.send_header("Access-Control-Allow-Origin", "*")
             self.end_headers()
+            try:
+                self.wfile.write(payload)
+            except BrokenPipeError:
+                pass
+        except Exception:
+            self._send_error(502, f"Station API unavailable: {station_id}")
 
     def _send_error(self, code, msg):
         self.send_response(code)
@@ -149,12 +248,35 @@ class NowPlayingHandler(http.server.BaseHTTPRequestHandler):
             pass
 
     def do_POST(self):
-        path = urllib.parse.urlparse(self.path).path.rstrip("/")
+        parsed = urllib.parse.urlparse(self.path)
+        path = parsed.path.rstrip("/") or "/"
+        station_route = parse_station_route(path)
+        if station_route:
+            station_id, station_path = station_route
+            if station_path != "/message":
+                self.send_response(404)
+                self.end_headers()
+                return
+            content_length = int(self.headers.get('Content-Length', 0))
+            body = self.rfile.read(content_length)
+            return self._proxy_station_request(
+                station_id,
+                station_path,
+                parsed.query,
+                method="POST",
+                body=body,
+                content_type=self.headers.get("Content-Type"),
+            )
+
         if path != "/message":
             self.send_response(404)
             self.end_headers()
             return
 
+        content_length = int(self.headers.get('Content-Length', 0))
+        self._handle_message_body(self.rfile.read(content_length))
+
+    def _handle_message_body(self, body: bytes):
         client_ip = self.client_address[0]
         now = time.time()
         if client_ip in last_message_times and now - last_message_times[client_ip] < MESSAGE_COOLDOWN:
@@ -162,8 +284,7 @@ class NowPlayingHandler(http.server.BaseHTTPRequestHandler):
             return self._send_error(429, f"Please wait {wait_time}s")
 
         try:
-            content_length = int(self.headers.get('Content-Length', 0))
-            data = json.loads(self.rfile.read(content_length).decode('utf-8'))
+            data = json.loads(body.decode('utf-8'))
             message = data.get('message', '').strip()
             if not message or len(message) > 280:
                 return self._send_error(400, "Invalid message")
@@ -183,6 +304,27 @@ class NowPlayingHandler(http.server.BaseHTTPRequestHandler):
 
     def log_message(self, format, *args):
         pass  # Suppress logging
+
+
+def parse_station_route(path: str) -> tuple[str, str] | None:
+    """Return (station_id, endpoint_path) for public station-prefixed API paths."""
+    parts = [part for part in path.strip("/").split("/") if part]
+    if len(parts) < 2:
+        return None
+
+    if parts[0] == "stations":
+        if len(parts) < 3:
+            return None
+        station_id = parts[1].lower()
+        endpoint_parts = parts[2:]
+    else:
+        station_id = parts[0].lower()
+        endpoint_parts = parts[1:]
+
+    if endpoint_parts[0] not in STATION_PROXY_ENDPOINTS:
+        return None
+
+    return station_id, "/" + "/".join(endpoint_parts)
 
 
 def check_process(name: str) -> bool:
@@ -205,14 +347,22 @@ def get_health_status() -> dict:
     """Get comprehensive health status of all components."""
     icecast_ok = check_url(ICECAST_STATUS_URL)
     encoder = _encoder_getter() if _encoder_getter else None
+    streamer_attached = _api_mode == "stream"
     streamer_ok = encoder is not None and encoder.poll() is None
     tunnel_ok = check_process("cloudflared")
+    healthy = icecast_ok and tunnel_ok and (streamer_ok or not streamer_attached)
     return {
-        "status": "healthy" if icecast_ok and streamer_ok and tunnel_ok else "degraded",
+        "status": "healthy" if healthy else "degraded",
+        "mode": _api_mode,
+        "station_id": STATION.id,
+        "station": STATION.call_sign,
+        "mount": STATION.stream.mount,
         "timestamp": datetime.now().isoformat(),
         "components": {
             "icecast": {"status": "up" if icecast_ok else "down"},
-            "streamer": {"status": "up" if streamer_ok else "down"},
+            "streamer": {
+                "status": "up" if streamer_ok else ("not_attached" if not streamer_attached else "down")
+            },
             "tunnel": {"status": "up" if tunnel_ok else "down"},
             "api": {"status": "up"},
         },
@@ -284,6 +434,7 @@ def save_message(message: str, ip: str):
 
         # Add new message
         messages.append({
+            "station_id": STATION.id,
             "message": message,
             "ip": ip,
             "timestamp": datetime.now().isoformat(),
@@ -352,6 +503,9 @@ def get_messages(limit: int = 20) -> list[dict]:
 def get_now_playing() -> dict:
     """Read current track info from shared in-memory state."""
     data = dict(_track_info)
+    data.setdefault("station_id", STATION.id)
+    data.setdefault("station", STATION.call_sign)
+    data.setdefault("mount", STATION.stream.mount)
     data["listeners"] = _listener_fn() if _listener_fn else 0
     return data
 
@@ -360,7 +514,7 @@ def get_schedule_info() -> dict:
     """Get current and upcoming show schedule."""
     try:
         from schedule import load_schedule
-        schedule_path = PROJECT_ROOT / "config" / "schedule.yaml"
+        schedule_path = STATION.schedule_path
         schedule = load_schedule(schedule_path)
         now = datetime.now()
         current = schedule.resolve(now)
@@ -520,6 +674,36 @@ class ReusableTCPServer(socketserver.TCPServer):
     allow_reuse_address = True
 
 
+def _set_api_state(track_info: dict, encoder_getter, listener_fn, mode: str) -> None:
+    global _track_info, _encoder_getter, _listener_fn, _api_mode, SERVER_START_TIME
+    _track_info = track_info
+    _encoder_getter = encoder_getter
+    _listener_fn = listener_fn
+    _api_mode = mode
+    SERVER_START_TIME = time.time()
+
+
+def serve_api_forever(
+    track_info: dict | None = None,
+    encoder_getter=None,
+    listener_fn=None,
+) -> None:
+    """Run the API as a standalone process.
+
+    This keeps public station-prefixed routes such as
+    /klod-fm/now-playing alive even when the legacy WRIT-FM stream is stopped.
+    """
+    _set_api_state(
+        track_info or {},
+        encoder_getter or (lambda: None),
+        listener_fn or (lambda: 0),
+        mode="standalone",
+    )
+    with ReusableTCPServer(("", PORT), NowPlayingHandler) as httpd:
+        print(f"Now Playing API listening on port {PORT} for {STATION.call_sign}", flush=True)
+        httpd.serve_forever()
+
+
 def start_api_thread(track_info: dict, encoder_getter, listener_fn) -> threading.Thread:
     """Start the HTTP API server in a daemon thread.
 
@@ -528,11 +712,7 @@ def start_api_thread(track_info: dict, encoder_getter, listener_fn) -> threading
         encoder_getter: Callable returning the current encoder subprocess.
         listener_fn: Callable returning the current listener count.
     """
-    global _track_info, _encoder_getter, _listener_fn, SERVER_START_TIME
-    _track_info = track_info
-    _encoder_getter = encoder_getter
-    _listener_fn = listener_fn
-    SERVER_START_TIME = time.time()
+    _set_api_state(track_info, encoder_getter, listener_fn, mode="stream")
 
     def _serve():
         try:
@@ -544,3 +724,12 @@ def start_api_thread(track_info: dict, encoder_getter, listener_fn) -> threading
     t = threading.Thread(target=_serve, daemon=True)
     t.start()
     return t
+
+
+def main() -> int:
+    serve_api_forever()
+    return 0
+
+
+if __name__ == "__main__":
+    raise SystemExit(main())

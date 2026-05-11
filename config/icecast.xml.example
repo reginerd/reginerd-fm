@@ -3,7 +3,7 @@
     <admin>admin@localhost</admin>
     <limits>
         <clients>100</clients>
-        <sources>2</sources>
+        <sources>4</sources>
     </limits>
     <authentication>
         <source-password>YOUR_SOURCE_PASSWORD</source-password>
@@ -16,6 +16,14 @@
     </listen-socket>
     <mount>
         <mount-name>/stream</mount-name>
+        <charset>UTF-8</charset>
+    </mount>
+    <mount>
+        <mount-name>/klod-fm</mount-name>
+        <charset>UTF-8</charset>
+    </mount>
+    <mount>
+        <mount-name>/cdex-fm</mount-name>
         <charset>UTF-8</charset>
     </mount>
     <paths>

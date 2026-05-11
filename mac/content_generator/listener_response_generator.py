@@ -33,17 +33,19 @@ import os
 os.environ.pop("CLAUDECODE", None)
 
 from helpers import log, preprocess_for_tts, run_claude, render_single_voice, get_audio_duration
-from persona import build_host_prompt, get_host, STATION_NAME
+from persona import build_host_prompt, get_host
 from ledger import append_event, event_id, ingest_messages
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
-SCHEDULE_PATH = PROJECT_ROOT / "config" / "schedule.yaml"
-OUTPUT_DIR = PROJECT_ROOT / "output" / "talk_segments"
-SCRIPTS_DIR = PROJECT_ROOT / "output" / "scripts"
-MESSAGES_FILE = Path.home() / ".writ" / "messages.json"
-
 sys.path.insert(0, str(PROJECT_ROOT / "mac"))
+from station_config import load_station_config  # noqa: E402
 from schedule import load_schedule, slot_key  # noqa: E402
+
+STATION = load_station_config()
+SCHEDULE_PATH = STATION.schedule_path
+OUTPUT_DIR = STATION.talk_dir
+SCRIPTS_DIR = STATION.scripts_dir
+MESSAGES_FILE = STATION.messages_file
 
 # Short segments for quick turnaround
 WORD_TARGET_SINGLE = (100, 200)   # One message: short personal reply
@@ -158,7 +160,7 @@ def build_response_prompt(
 SEGMENT: Listener Response (PRIORITY — these are REAL messages from listeners)
 
 You have received {count} real message{'s' if count > 1 else ''} from listener{'s' if count > 1 else ''} \
-through the {STATION_NAME} website. Respond on air.
+through the {STATION.call_sign} website. Respond on air.
 
 MESSAGES:
 {msg_text}
@@ -270,6 +272,8 @@ def process_messages(max_batch: int = MAX_BATCH) -> int:
             SCRIPTS_DIR.mkdir(parents=True, exist_ok=True)
             meta_path = SCRIPTS_DIR / f"listener_response_{timestamp}.json"
             meta_path.write_text(json.dumps({
+                "station_id": STATION.id,
+                "station": STATION.call_sign,
                 "type": "listener_response",
                 "show_id": show_id,
                 "show_name": show_name,
@@ -283,6 +287,7 @@ def process_messages(max_batch: int = MAX_BATCH) -> int:
             }, indent=2))
             append_event({
                 "id": event_id("resp", str(output_path), datetime.now().isoformat(timespec="seconds")),
+                "station_id": STATION.id,
                 "type": "listener_response_generated",
                 "time": datetime.now().isoformat(timespec="seconds"),
                 "show_id": show_id,

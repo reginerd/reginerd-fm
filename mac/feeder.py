@@ -10,6 +10,7 @@ Also runs the API server and handles file consumption.
 """
 
 import json
+import html
 import os
 import random
 import signal
@@ -20,12 +21,24 @@ from datetime import datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
-PLAYLIST_FILE = PROJECT_ROOT / "output" / ".playlist.m3u"
-SILENCE_FILE = PROJECT_ROOT / "output" / ".silence.wav"
-TALK_DIR = PROJECT_ROOT / "output" / "talk_segments"
-BUMPER_DIR = PROJECT_ROOT / "output" / "music_bumpers"
-NOW_PLAYING_DEFAULT = PROJECT_ROOT / "output" / "now_playing.json"
-CURRENT_TRACK_FILE = PROJECT_ROOT / "output" / ".current_track.txt"
+sys.path.insert(0, str(Path(__file__).parent))
+from station_config import apply_station_env, load_station_config  # noqa: E402
+
+if "--station" in sys.argv:
+    station_idx = sys.argv.index("--station")
+    try:
+        os.environ["WRIT_STATION_ID"] = sys.argv[station_idx + 1]
+    except IndexError:
+        raise SystemExit("--station requires a station id")
+    del sys.argv[station_idx:station_idx + 2]
+
+STATION = load_station_config()
+PLAYLIST_FILE = STATION.playlist_file
+SILENCE_FILE = STATION.silence_file
+TALK_DIR = STATION.talk_dir
+BUMPER_DIR = STATION.bumper_dir
+NOW_PLAYING_DEFAULT = STATION.now_playing_file
+CURRENT_TRACK_FILE = STATION.current_track_file
 
 
 def _env_int(name: str, default: int) -> int:
@@ -42,10 +55,9 @@ MUSIC_ONLY_TRACK_LIMIT = _env_int("WRIT_MUSIC_ONLY_TRACK_LIMIT", 12)
 MUSIC_LEAD_IN_BUMPERS_RANGE = (2, 3)
 MUSIC_BUMPERS_AFTER_TALK_RANGE = (3, 4)
 
-sys.path.insert(0, str(Path(__file__).parent))
 from schedule import load_schedule, slot_key, parse_slot_key  # noqa: E402
-SCHEDULE_PATH = PROJECT_ROOT / "config" / "schedule.yaml"
-ARCHIVE_DIR = PROJECT_ROOT / "output" / "archive"
+SCHEDULE_PATH = STATION.schedule_path
+ARCHIVE_DIR = STATION.archive_dir
 
 try:
     from play_history import get_history
@@ -55,11 +67,12 @@ except ImportError:
 
 # Now-playing paths
 NOW_PLAYING_PATHS = [NOW_PLAYING_DEFAULT]
-public_repo = Path.home() / "GitHub" / "keltokhy.github.io" / "public" / "now_playing.json"
-if public_repo.parent.exists():
-    NOW_PLAYING_PATHS.append(public_repo)
+for public_path in STATION.public_now_playing_paths:
+    if public_path.parent.exists():
+        NOW_PLAYING_PATHS.append(public_path)
 
-ICECAST_STATUS_URL = os.environ.get("ICECAST_STATUS_URL", "http://localhost:8000/status-json.xsl")
+ICECAST_STATUS_URL = os.environ.get("ICECAST_STATUS_URL", STATION.stream.status_url)
+ICECAST_MOUNT = STATION.stream.mount
 
 running = True
 
@@ -184,7 +197,7 @@ def clean_name(filepath: Path) -> str:
         "news_analysis": "Signal Report", "interview": "The Interview",
         "panel": "Crosswire", "story": "Story Hour",
         "listener_mailbag": "Listener Hours", "music_essay": "Sonic Essay",
-        "station_id": "WRIT-FM", "show_intro": "Show Opening",
+        "station_id": STATION.call_sign, "show_intro": "Show Opening",
         "show_outro": "Show Closing",
     }
     for key, friendly in types.items():
@@ -196,10 +209,26 @@ def clean_name(filepath: Path) -> str:
 def get_listener_count() -> int:
     try:
         import urllib.request
+        import urllib.parse
         with urllib.request.urlopen(ICECAST_STATUS_URL, timeout=1.5) as resp:
             data = json.load(resp)
-        source = data.get("icestats", {}).get("source", {})
-        return int(source.get("listeners", 0) or 0)
+        sources = data.get("icestats", {}).get("source", {})
+        if isinstance(sources, dict):
+            sources = [sources]
+        if not isinstance(sources, list):
+            return 0
+
+        for source in sources:
+            listen_url = str(source.get("listenurl", ""))
+            path = urllib.parse.urlparse(listen_url).path
+            if source.get("mount") == ICECAST_MOUNT or path == ICECAST_MOUNT:
+                return int(source.get("listeners", 0) or 0)
+
+        # Icecast returns a single dict when only one source is active and that
+        # source may not include a mount field. Keep the old behaviour there.
+        if len(sources) == 1:
+            return int(sources[0].get("listeners", 0) or 0)
+        return 0
     except Exception:
         return 0
 
@@ -344,7 +373,8 @@ def run():
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGHUP, sighup_handler)
 
-    log("=== WRIT-FM Feeder ===")
+    log(f"=== {STATION.call_sign} Feeder ===")
+    log(f"Station: {STATION.id} | Mount: {STATION.stream.mount}")
     log(f"Playlist: {PLAYLIST_FILE}")
 
     # Ensure silence file exists for fallback
@@ -373,7 +403,7 @@ def run():
     try:
         from api_server import start_api_thread
         start_api_thread(track_info, lambda: _proxy, get_listener_count)
-        log("API server started on port 8001")
+        log(f"API server started on port {STATION.stream.api_port}")
     except Exception as e:
         log(f"API server failed: {e}")
 
@@ -453,6 +483,9 @@ def run():
                     track_type = "silence"
 
             np_info = {
+                "station_id": STATION.id,
+                "station": STATION.call_sign,
+                "mount": STATION.stream.mount,
                 "track": track_name,
                 "type": track_type,
                 "show_id": show["show_id"],
@@ -517,13 +550,88 @@ def run():
 # Global handle for ezstream subprocess
 ezstream_proc = None
 
-RADIO_XML = PROJECT_ROOT / "mac" / "radio.xml"
+RADIO_XML = STATION.ezstream_config_file
+
+
+def write_ezstream_config() -> Path:
+    """Render station-specific ezstream config.
+
+    ezstream does not know about station instances, so the generated config is
+    the handoff point: mount, metadata, and playlist intake all inherit the
+    station environment from the feeder process.
+    """
+    RADIO_XML.parent.mkdir(parents=True, exist_ok=True)
+    xml = f"""<?xml version="1.0" encoding="UTF-8"?>
+<ezstream>
+  <servers>
+    <server>
+      <hostname>{html.escape(STATION.stream.icecast_host)}</hostname>
+      <port>{STATION.stream.icecast_port}</port>
+      <password>{html.escape(STATION.stream.source_password)}</password>
+      <tls>None</tls>
+      <reconnect_attempts>0</reconnect_attempts>
+    </server>
+  </servers>
+
+  <streams>
+    <stream>
+      <mountpoint>{html.escape(STATION.stream.mount)}</mountpoint>
+      <format>{html.escape(STATION.stream.format)}</format>
+      <encoder>{html.escape(STATION.stream.encoder)}</encoder>
+      <stream_name>{html.escape(STATION.stream.stream_name)}</stream_name>
+      <stream_genre>{html.escape(STATION.stream.stream_genre)}</stream_genre>
+      <stream_description>{html.escape(STATION.stream.stream_description)}</stream_description>
+    </stream>
+  </streams>
+
+  <intakes>
+    <intake>
+      <type>program</type>
+      <filename>mac/playlist_intake.py</filename>
+      <shuffle>No</shuffle>
+      <stream_once>No</stream_once>
+    </intake>
+  </intakes>
+
+  <metadata>
+    <program>mac/stream_metadata.sh</program>
+    <format_str>@a@ - @t@</format_str>
+    <normalize_strings>Yes</normalize_strings>
+    <no_updates>No</no_updates>
+  </metadata>
+
+  <decoders>
+    <decoder>
+      <name>ffmpeg-wav</name>
+      <program>ffmpeg -v quiet -i @T@ -af loudnorm=I=-14:TP=-1.5:LRA=7,aresample=44100 -f s16le -acodec pcm_s16le -ar 44100 -ac 2 -</program>
+      <file_ext>.wav</file_ext>
+    </decoder>
+    <decoder>
+      <name>ffmpeg-flac</name>
+      <program>ffmpeg -v quiet -i @T@ -af loudnorm=I=-16:TP=-1.5:LRA=11,afade=t=in:st=0:d=3,aresample=44100 -f s16le -acodec pcm_s16le -ar 44100 -ac 2 -</program>
+      <file_ext>.flac</file_ext>
+    </decoder>
+  </decoders>
+
+  <encoders>
+    <encoder>
+      <name>oggenc-q4</name>
+      <format>Ogg</format>
+      <program>oggenc -r -B 16 -C 2 -R 44100 --raw-endianness 0 -q 4 -t @M@ -</program>
+    </encoder>
+  </encoders>
+</ezstream>
+"""
+    RADIO_XML.write_text(xml)
+    return RADIO_XML
 
 
 def start_ezstream() -> subprocess.Popen:
     """Start ezstream as a child process. Kills any stale instances first."""
-    # Kill any stale ezstream processes
-    subprocess.run(["pkill", "-f", "ezstream.*radio.xml"],
+    write_ezstream_config()
+
+    # Kill stale ezstream processes for this station only.
+    subprocess.run(["pkill", "-f", f"ezstream.*{RADIO_XML}"],
                    capture_output=True, timeout=5)
     time.sleep(1)
 
@@ -538,6 +646,7 @@ def start_ezstream() -> subprocess.Popen:
         stdout=subprocess.DEVNULL,
         stderr=subprocess.PIPE,
         cwd=str(PROJECT_ROOT),
+        env=apply_station_env(STATION),
         start_new_session=True,  # own process group so SIGHUP doesn't propagate
     )
 
