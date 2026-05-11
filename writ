@@ -276,7 +276,11 @@ start_one() {
         set_tmux_env_if_present YOUTUBE_AUDIO_URL
         set_tmux_env_if_present YOUTUBE_AUDIO_HEALTH_URL
         set_tmux_env_if_present YOUTUBE_VIDEO_SOURCE
+        set_tmux_env_if_present YOUTUBE_BACKGROUND_IMAGE
+        set_tmux_env_if_present YOUTUBE_VIDEO_FILTER
         set_tmux_env_if_present YOUTUBE_VIDEO_BITRATE
+        set_tmux_env_if_present YOUTUBE_VIDEO_BUFSIZE
+        set_tmux_env_if_present YOUTUBE_X264_PARAMS
         set_tmux_env_if_present YOUTUBE_AUDIO_BITRATE
         set_tmux_env_if_present YOUTUBE_SAMPLE_RATE
         set_tmux_env_if_present YOUTUBE_FPS

@@ -17,6 +17,8 @@ YOUTUBE_RTMP_BASE="${YOUTUBE_RTMP_BASE:-rtmp://x.rtmp.youtube.com/live2}"
 YOUTUBE_AUDIO_URL="${YOUTUBE_AUDIO_URL:-http://${WRIT_ICECAST_HOST}:${WRIT_ICECAST_PORT}${WRIT_ICECAST_MOUNT}}"
 YOUTUBE_AUDIO_HEALTH_URL="${YOUTUBE_AUDIO_HEALTH_URL:-${ICECAST_STATUS_URL}}"
 YOUTUBE_VIDEO_SOURCE="${YOUTUBE_VIDEO_SOURCE:-color=c=0x101318:s=1280x720:r=30}"
+YOUTUBE_BACKGROUND_IMAGE="${YOUTUBE_BACKGROUND_IMAGE:-}"
+YOUTUBE_VIDEO_FILTER="${YOUTUBE_VIDEO_FILTER:-scale=1280:720:force_original_aspect_ratio=increase,crop=1280:720,format=yuv420p}"
 YOUTUBE_VIDEO_BITRATE="${YOUTUBE_VIDEO_BITRATE:-2500k}"
 YOUTUBE_VIDEO_BUFSIZE="${YOUTUBE_VIDEO_BUFSIZE:-5000k}"
 YOUTUBE_X264_PARAMS="${YOUTUBE_X264_PARAMS:-nal-hrd=cbr:force-cfr=1}"
@@ -43,18 +45,31 @@ if ! ffprobe -hide_banner -loglevel error "$YOUTUBE_AUDIO_URL" >/dev/null; then
     exit 1
 fi
 
+video_input=(-f lavfi -re -i "$YOUTUBE_VIDEO_SOURCE")
+if [[ -n "$YOUTUBE_BACKGROUND_IMAGE" ]]; then
+    if [[ ! -f "$YOUTUBE_BACKGROUND_IMAGE" ]]; then
+        echo "YOUTUBE_BACKGROUND_IMAGE does not exist: $YOUTUBE_BACKGROUND_IMAGE" >&2
+        exit 1
+    fi
+    video_input=(-loop 1 -framerate "$YOUTUBE_FPS" -re -i "$YOUTUBE_BACKGROUND_IMAGE")
+fi
+
 echo "Relaying ${WRIT_CALL_SIGN} ${WRIT_ICECAST_MOUNT} -> YouTube RTMP"
 echo "Audio: $YOUTUBE_AUDIO_URL"
-echo "Video: generated ${YOUTUBE_FPS}fps slate, ${YOUTUBE_VIDEO_BITRATE}; audio ${YOUTUBE_AUDIO_BITRATE}"
+if [[ -n "$YOUTUBE_BACKGROUND_IMAGE" ]]; then
+    echo "Video: $YOUTUBE_BACKGROUND_IMAGE at ${YOUTUBE_FPS}fps, ${YOUTUBE_VIDEO_BITRATE}; audio ${YOUTUBE_AUDIO_BITRATE}"
+else
+    echo "Video: generated ${YOUTUBE_FPS}fps slate, ${YOUTUBE_VIDEO_BITRATE}; audio ${YOUTUBE_AUDIO_BITRATE}"
+fi
 
 exec ffmpeg -hide_banner -loglevel info -nostdin -stats_period 15 \
-    -f lavfi -re -i "$YOUTUBE_VIDEO_SOURCE" \
+    "${video_input[@]}" \
     -thread_queue_size 4096 \
     -reconnect 1 -reconnect_streamed 1 -reconnect_delay_max 5 \
     -re -i "$YOUTUBE_AUDIO_URL" \
     -map 0:v:0 -map 1:a:0 \
     -c:v libx264 -preset veryfast -tune stillimage \
-    -pix_fmt yuv420p -r "$YOUTUBE_FPS" -g "$YOUTUBE_GOP" \
+    -vf "$YOUTUBE_VIDEO_FILTER" -pix_fmt yuv420p -r "$YOUTUBE_FPS" -g "$YOUTUBE_GOP" \
     -b:v "$YOUTUBE_VIDEO_BITRATE" \
     -minrate "$YOUTUBE_VIDEO_BITRATE" -maxrate "$YOUTUBE_VIDEO_BITRATE" \
     -bufsize "$YOUTUBE_VIDEO_BUFSIZE" -x264-params "$YOUTUBE_X264_PARAMS" \

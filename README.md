@@ -115,6 +115,8 @@ Relay a station to YouTube without committing the stream key:
 YOUTUBE_STREAM_KEY=... ./writ --station klod-fm start youtube
 # or provide the full endpoint:
 YOUTUBE_RTMP_URL=rtmp://x.rtmp.youtube.com/live2/... ./writ --station klod-fm start youtube
+# optionally use a still image as the video background:
+YOUTUBE_BACKGROUND_IMAGE=/path/to/background.png YOUTUBE_STREAM_KEY=... ./writ --station klod-fm start youtube
 ```
 
 The listener endpoints are the Icecast mounts:
