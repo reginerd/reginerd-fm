@@ -55,7 +55,7 @@ class StreamConfig:
     stream_genre: str
     stream_description: str
     format: str = "Ogg"
-    encoder: str = "oggenc-q4"
+    encoder: str = "oggenc-q8"
 
     @property
     def status_url(self) -> str:
@@ -296,7 +296,7 @@ def load_station_config(station_id: str | None = None, path: Path = CONFIG_PATH)
             stream_genre=str(stream.get("stream_genre", "Talk Radio")),
             stream_description=str(stream.get("stream_description", "Autonomous AI radio")),
             format=str(stream.get("format", "Ogg")),
-            encoder=str(stream.get("encoder", "oggenc-q4")),
+            encoder=str(stream.get("encoder", "oggenc-q8")),
         ),
         output_dir=_expand_path(paths.get("output_dir", output_default)) or PROJECT_ROOT / output_default,
         home_dir=_expand_path(paths.get("home_dir", home_default)) or Path.home() / ".writ",

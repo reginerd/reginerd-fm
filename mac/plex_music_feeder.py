@@ -7,6 +7,7 @@ into output/music_bumpers/{show_id}/ for feeder.py to pick up.
 No file copying — symlinks only.
 
 Usage:
+    uv run python mac/plex_music_feeder.py --all --full
     uv run python mac/plex_music_feeder.py --all --min 20
     uv run python mac/plex_music_feeder.py --show prime_time --count 10
     uv run python mac/plex_music_feeder.py --status
@@ -146,6 +147,7 @@ def stock_show(
     genres: list[str],
     min_tracks: int,
     count: int | None,
+    full: bool = False,
 ) -> int:
     """Symlink tracks for a show. Returns number of new symlinks created."""
     show_dir = BUMPER_DIR / show_id
@@ -162,17 +164,19 @@ def stock_show(
         b.unlink()
     existing = [f for f in existing if not (f.is_symlink() and not f.exists())]
 
-    need = count if count is not None else max(0, min_tracks - len(existing))
-    if need <= 0:
-        print(f"  {show_id}: {len(existing)} tracks stocked (min={min_tracks}) — skipping")
-        return 0
+    if not full:
+        need = count if count is not None else max(0, min_tracks - len(existing))
+        if need <= 0:
+            print(f"  {show_id}: {len(existing)} tracks stocked (min={min_tracks}) — skipping")
+            return 0
 
-    print(f"  {show_id}: {len(existing)} existing, need {need} more [{', '.join(genres)}]")
+    print(f"  {show_id}: {len(existing)} existing, syncing all [{', '.join(genres)}]" if full else
+          f"  {show_id}: {len(existing)} existing, need {need} more [{', '.join(genres)}]")
 
     candidates: list[dict] = []
     for genre in genres:
         try:
-            tracks = client.get_tracks_by_genre(genre, limit=500)
+            tracks = client.get_tracks_by_genre(genre, limit=10000)
             candidates.extend(tracks)
         except ValueError as e:
             print(f"    Warning: {e}")
@@ -184,7 +188,11 @@ def stock_show(
     existing_targets = {str(f.resolve()) for f in existing if f.is_symlink()}
     candidates = [t for t in candidates if str(t["file"].resolve()) not in existing_targets]
 
-    random.shuffle(candidates)
+    if full:
+        need = len(candidates)
+    else:
+        random.shuffle(candidates)
+
     added = 0
     for track in candidates[:need]:
         src: Path = track["file"]
@@ -233,6 +241,7 @@ def main() -> int:
     group.add_argument("--all", action="store_true", help="Stock all show blocks")
     group.add_argument("--status", action="store_true", help="Show queue status (no Plex needed)")
     group.add_argument("--genres", action="store_true", help="List available Plex genres")
+    parser.add_argument("--full", action="store_true", help="Sync all available Plex tracks (no limit)")
     parser.add_argument("--min", type=int, default=20, help="Minimum tracks per show (default 20)")
     parser.add_argument("--count", type=int, help="Add exactly N tracks regardless of current count")
     args = parser.parse_args()
@@ -281,13 +290,13 @@ def main() -> int:
         if args.show not in show_genres:
             print(f"Error: unknown show '{args.show}'. Known: {', '.join(show_genres)}")
             return 1
-        stock_show(client, args.show, show_genres[args.show], args.min, args.count)
+        stock_show(client, args.show, show_genres[args.show], args.min, args.count, full=args.full)
         return 0
 
     if args.all:
         total = 0
         for show_id, genres in show_genres.items():
-            total += stock_show(client, show_id, genres, args.min, args.count)
+            total += stock_show(client, show_id, genres, args.min, args.count, full=args.full)
         print(f"\nTotal new tracks added: {total}")
         return 0
 

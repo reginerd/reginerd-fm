@@ -84,8 +84,15 @@ def log(msg: str):
 
 
 def _path_is_under(path: Path, root: Path) -> bool:
+    resolved_root = root.resolve()
     try:
-        path.resolve().relative_to(root.resolve())
+        # Check symlink path itself (not its target) so NAS-backed symlinks pass
+        Path(os.path.abspath(path)).relative_to(resolved_root)
+        return True
+    except (OSError, RuntimeError, ValueError):
+        pass
+    try:
+        path.resolve().relative_to(resolved_root)
         return True
     except (OSError, RuntimeError, ValueError):
         return False
@@ -129,15 +136,27 @@ def _is_current_station_content(path: Path, expected_show_id: str | None = None)
         log(f"  Skipping {metadata_show} content in {expected_show_id}: {path.name}")
         return False
     if expected_show_id and not metadata_show and not path.name.startswith(f"{expected_show_id}_"):
-        log(f"  Skipping unowned content in {expected_show_id}: {path.name}")
-        return False
+        # Also accept files living in a directory named after the show (bumper dirs from plex_music_feeder)
+        if path.parent.name != expected_show_id:
+            log(f"  Skipping unowned content in {expected_show_id}: {path.name}")
+            return False
 
     return True
+
+
+force_rebuild = False
 
 
 def sighup_handler(signum, frame):
     """Ignore SIGHUP — we send it to ezstream and don't want to die from it."""
     pass
+
+
+def sigusr1_handler(signum, frame):
+    """Force an immediate playlist rebuild on next loop tick."""
+    global force_rebuild
+    force_rebuild = True
+    log("SIGUSR1: playlist rebuild requested")
 
 
 def signal_handler(signum, frame):
@@ -238,10 +257,14 @@ def get_bumpers(show_id: str) -> list[Path]:
     if HISTORY_ENABLED and files:
         try:
             repeat_hours = int(os.environ.get("WRIT_BUMPER_REPEAT_HOURS", "4"))
-            recent = get_history().get_recent_filepaths(hours=repeat_hours)
+            history = get_history()
+            recent = history.get_recent_filepaths(hours=repeat_hours)
             fresh = [f for f in files if str(f) not in recent]
             if fresh:
                 files = fresh
+            else:
+                last_played = history.get_last_played([str(f) for f in files])
+                files.sort(key=lambda f: last_played.get(str(f), ""))
         except Exception as e:
             log(f"  Bumper history filter failed: {e}")
     random.shuffle(files)
@@ -426,10 +449,11 @@ def write_playlist(entries: list[dict]):
 
 
 def run():
-    global running, ezstream_proc
+    global running, ezstream_proc, force_rebuild
     signal.signal(signal.SIGTERM, signal_handler)
     signal.signal(signal.SIGINT, signal_handler)
     signal.signal(signal.SIGHUP, sighup_handler)
+    signal.signal(signal.SIGUSR1, sigusr1_handler)
 
     log(f"=== {STATION.call_sign} Feeder ===")
     log(f"Station: {STATION.id} | Mount: {STATION.stream.mount}")
@@ -506,6 +530,16 @@ def run():
             log(f"  Playlist: {len(playlist_entries)} tracks")
             for e in playlist_entries:
                 log(f"    [{e['type']}] {e['name']}")
+
+        # Force rebuild requested via SIGUSR1
+        if force_rebuild:
+            force_rebuild = False
+            log("Force rebuilding playlist...")
+            playlist_entries = build_playlist(current_show_id, current_slot)
+            last_talk_set = {p.name for p in get_talk_segments(current_show_id, current_slot)}
+            write_playlist(playlist_entries)
+            signal_ezstream_reload()
+            log(f"  Playlist rebuilt: {len(playlist_entries)} tracks")
 
         # Update now-playing info
         now = time.time()
@@ -673,9 +707,9 @@ def write_ezstream_config() -> Path:
 
   <encoders>
     <encoder>
-      <name>oggenc-q4</name>
+      <name>oggenc-q8</name>
       <format>Ogg</format>
-      <program>oggenc -r -B 16 -C 2 -R 44100 --raw-endianness 0 -q 4 -t @M@ -</program>
+      <program>oggenc -r -B 16 -C 2 -R 44100 --raw-endianness 0 -q 8 -t @M@ -</program>
     </encoder>
   </encoders>
 </ezstream>

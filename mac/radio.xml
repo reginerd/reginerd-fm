@@ -19,7 +19,7 @@
     <stream>
       <mountpoint>/stream</mountpoint>
       <format>Ogg</format>
-      <encoder>oggenc-q4</encoder>
+      <encoder>oggenc-q8</encoder>
       <stream_name>WRIT-FM</stream_name>
       <stream_genre>Talk Radio</stream_genre>
       <stream_description>The frequency between frequencies</stream_description>
@@ -65,9 +65,9 @@
 
   <encoders>
     <encoder>
-      <name>oggenc-q4</name>
+      <name>oggenc-q8</name>
       <format>Ogg</format>
-      <program>oggenc -r -B 16 -C 2 -R 44100 --raw-endianness 0 -q 4 -t @M@ -</program>
+      <program>oggenc -r -B 16 -C 2 -R 44100 --raw-endianness 0 -q 8 -t @M@ -</program>
     </encoder>
   </encoders>
 </ezstream>

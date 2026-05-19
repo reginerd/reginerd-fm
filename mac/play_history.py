@@ -98,6 +98,19 @@ class PlayHistory:
             )
             return {row[0] for row in cursor.fetchall()}
 
+    def get_last_played(self, filepaths: list[str]) -> dict[str, str]:
+        """Get most recent played_at for each filepath. Returns filepath → ISO timestamp."""
+        if not filepaths:
+            return {}
+        placeholders = ",".join("?" * len(filepaths))
+        with sqlite3.connect(self.db_path) as conn:
+            cursor = conn.execute(
+                f"SELECT filepath, MAX(played_at) FROM plays "
+                f"WHERE filepath IN ({placeholders}) GROUP BY filepath",
+                filepaths,
+            )
+            return {row[0]: row[1] for row in cursor.fetchall()}
+
     def get_play_count(self, filepath: str) -> int:
         """Get total play count for a track."""
         with sqlite3.connect(self.db_path) as conn:
