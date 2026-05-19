@@ -82,8 +82,7 @@ class PlexClient:
         genres: dict[str, int] = {}
         for tag in root.iter("Directory"):
             title = tag.get("title", "")
-            # ratingKey is the stable integer ID
-            key = tag.get("ratingKey", "")
+            key = tag.get("key", "")
             if title and key:
                 try:
                     genres[title] = int(key)
