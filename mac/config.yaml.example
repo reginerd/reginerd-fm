@@ -1,41 +1,36 @@
-# WRIT-FM Configuration
-# Copy this file to config.yaml and customize for your setup
+# RGNRD-FM Configuration
+# Copy this file to mac/config.yaml and fill in your values.
 
-# Music sources - directories containing audio files (mp3, flac, m4a, wav)
-# The streamer scans these recursively
-music_sources:
-  - ~/Music
-  - /path/to/more/music
+# Plex server settings
+plex:
+  host: 192.168.1.27
+  port: 32400
+  token_env: PLEX_TOKEN          # Set PLEX_TOKEN in .env
+  library_section: 1             # Music library section key
 
-# Voice reference for TTS cloning (Chatterbox)
-# A 10-30 second WAV file of the voice you want to clone
-voice_reference: ./voice_reference/operator_voice.wav
+# NAS mount path (where Plex music files are accessible on this machine)
+nas_mount: /Volumes/music        # Adjust to your actual mount path
 
-# LLM settings (for Claude CLI or LM Studio)
-# Used by content generators to write DJ scripts
+# LLM settings (Claude API)
 llm:
-  base_url: http://localhost:1234/v1  # LM Studio default
   timeout: 60
   temperature: 0.8
   max_tokens: 300
 
-# Chatterbox TTS settings
+# TTS — ElevenLabs (primary) + Kokoro (fallback)
 tts:
-  exaggeration: 0.5   # Voice expressiveness (0-1)
-  cfg_weight: 0.5     # Classifier-free guidance
-  temperature: 0.8    # Sampling temperature
+  elevenlabs:
+    voice_id_env: ELEVENLABS_VOICE_ID   # Set in .env after voice clone is ready
+    api_key_env: ELEVENLABS_API_KEY
+  kokoro:
+    voice: "af_heart"                   # Fallback voice
 
 # Icecast streaming server
-# Per-station mounts and API ports live in config/stations.yaml.
 icecast:
   host: localhost
   port: 8000
   mount: /stream
-  source_password: YOUR_SOURCE_PASSWORD  # Must match icecast.xml
-
-# Cloudflare tunnel (optional - for public streaming)
-# tunnel:
-#   name: your-tunnel-name
+  source_password_env: RGNRD_SOURCE_PASSWORD
 
 # API server for now-playing info
 api:
@@ -43,4 +38,4 @@ api:
 
 # Content generation
 generation:
-  segments_ahead: 10  # Keep this many segments ready
+  segments_ahead: 10             # Keep this many talk segments ready

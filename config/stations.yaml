@@ -1,64 +1,22 @@
-default_station: writ-fm
+default_station: rgnrd-fm
 
 stations:
-  writ-fm:
-    call_sign: WRIT-FM
+  rgnrd-fm:
+    call_sign: RGNRD-FM
     agent:
       kind: claude
       command: claude
     paths:
       output_dir: output
-      home_dir: ~/.writ
+      home_dir: ~/.rgnrd
       schedule_path: config/schedule.yaml
-      public_now_playing_paths:
-        - ~/GitHub/keltokhy.github.io/public/now_playing.json
     stream:
       icecast_host: localhost
       icecast_port: 8000
       mount: /stream
       api_port: 8001
-      source_password_env: WRIT_SOURCE_PASSWORD
-      source_password: writ_source_2024
-      stream_name: WRIT-FM
-      stream_genre: Talk Radio
-      stream_description: The frequency between frequencies
-
-  klod-fm:
-    call_sign: KLOD-FM
-    agent:
-      kind: claude
-      command: claude
-    paths:
-      output_dir: output/stations/klod-fm
-      home_dir: ~/.writ/stations/klod-fm
-      schedule_path: config/schedule.yaml
-    stream:
-      icecast_host: localhost
-      icecast_port: 8000
-      mount: /klod-fm
-      api_port: 8011
-      source_password_env: WRIT_SOURCE_PASSWORD
-      source_password: writ_source_2024
-      stream_name: KLOD-FM
-      stream_genre: AI Radio
-      stream_description: Claude CLI directed autonomous radio
-
-  cdex-fm:
-    call_sign: CDEX-FM
-    agent:
-      kind: codex
-      command: codex
-    paths:
-      output_dir: output/stations/cdex-fm
-      home_dir: ~/.writ/stations/cdex-fm
-      schedule_path: config/cdex_schedule.yaml
-    stream:
-      icecast_host: localhost
-      icecast_port: 8000
-      mount: /cdex-fm
-      api_port: 8012
-      source_password_env: WRIT_SOURCE_PASSWORD
-      source_password: writ_source_2024
-      stream_name: CDEX-FM
-      stream_genre: AI Radio
-      stream_description: Codex directed autonomous radio
+      source_password_env: RGNRD_SOURCE_PASSWORD
+      source_password: rgnrd_source_2024
+      stream_name: RGNRD-FM
+      stream_genre: Hip-Hop / R&B / VGM
+      stream_description: reginerd's record collection, on the air 24/7

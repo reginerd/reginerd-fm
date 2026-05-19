@@ -1,129 +1,70 @@
 timezone: local
 
-# WRIT-FM Show Schedule
-# Music-forward format: short hosted breaks inside longer AI music blocks.
+# RGNRD-FM Show Schedule
+# One DJ: reginerd. Music-forward — short talk breaks between tracks.
+# Genres pulled from Plex library by plex_music_feeder.py.
 
 shows:
-  midnight_signal:
-    name: "Midnight Signal"
-    description: "Philosophy, memory, and the transmissions that only come through after midnight."
-    host: "liminal_operator"
-    topic_focus: "philosophy"
-    segment_types: ["deep_dive", "story", "interview", "listener_mailbag"]
-    bumper_style: "ambient"
+  morning:
+    name: "Morning"
+    description: "R&B, Soul, and Jazz to start the day right."
+    host: "reginerd"
+    genres: ["R&B", "Easy Listening", "Jazz", "Vocal"]
+    segment_types: ["track_intro", "track_outro", "station_id"]
     voices:
-      host: "am_michael"
+      host: "reginerd_clone"
 
-  the_night_garden:
-    name: "The Night Garden"
-    description: "Dreams, darkness, and the things that bloom when no one is watching."
-    host: "nyx"
-    topic_focus: "night_philosophy"
-    segment_types: ["deep_dive", "story", "interview"]
-    bumper_style: "ambient"
+  midday:
+    name: "Midday"
+    description: "Eclectic mix — Pop/Rock, Reggae, Folk, Electronic."
+    host: "reginerd"
+    genres: ["Pop/Rock", "Reggae", "Folk", "Electronic", "Country"]
+    segment_types: ["track_intro", "track_outro", "station_id"]
     voices:
-      host: "af_heart"
+      host: "reginerd_clone"
 
-  dawn_chorus:
-    name: "Dawn Chorus"
-    description: "Morning reflections. The world rewrites itself at sunrise."
-    host: "liminal_operator"
-    topic_focus: "philosophy"
-    segment_types: ["deep_dive", "music_essay", "story"]
-    bumper_style: "jazz"
+  prime_time:
+    name: "Prime Time"
+    description: "Rap and R&B. Regional focus — Bay, LA, ATL, NY."
+    host: "reginerd"
+    genres: ["Rap", "R&B"]
+    segment_types: ["track_intro", "track_outro", "station_id", "deep_cut"]
     voices:
-      host: "am_michael"
+      host: "reginerd_clone"
 
-  sonic_archaeology:
-    name: "Sonic Archaeology"
-    description: "Deep cuts, lost sessions, genre genealogy, and the music they forgot to remember."
-    host: "dr_resonance"
-    topic_focus: "music_history"
-    segment_types: ["deep_dive", "music_essay", "interview"]
-    bumper_style: "jazz"
+  wind_down:
+    name: "Wind Down"
+    description: "Instrumentals and chill. The day slows down."
+    host: "reginerd"
+    genres: ["Jazz", "Easy Listening", "Electronic"]
+    segment_types: ["track_intro", "track_outro"]
     voices:
-      host: "bm_daniel"
+      host: "reginerd_clone"
 
-  signal_report:
-    name: "Signal Report"
-    description: "Current events decoded. The news behind the news, through a late-night lens."
-    host: "signal"
-    topic_focus: "current_events"
-    segment_types: ["news_analysis", "deep_dive", "panel"]
-    bumper_style: "downtempo"
+  late_night:
+    name: "Late Night"
+    description: "Stage & Screen — video game and film soundtracks. reginerd's gaming zone."
+    host: "reginerd"
+    genres: ["Stage & Screen"]
+    segment_types: ["track_intro", "track_outro", "game_context"]
     voices:
-      host: "am_onyx"
+      host: "reginerd_clone"
 
-  the_groove_lab:
-    name: "The Groove Lab"
-    description: "Soul, funk, and the feeling of feeling something. Music as food."
-    host: "ember"
-    topic_focus: "soul_music"
-    segment_types: ["deep_dive", "music_essay", "story"]
-    bumper_style: "soul"
-    voices:
-      host: "af_bella"
-
-  crosswire:
-    name: "Crosswire"
-    description: "Two voices, one topic. Where ideas collide and sparks fly."
-    host: "dr_resonance"
-    topic_focus: "culture"
-    segment_types: ["panel", "deep_dive", "interview"]
-    bumper_style: "indie"
-    voices:
-      host: "bm_daniel"
-      guest: "af_bella"
-
-  listener_hours:
-    name: "Listener Hours"
-    description: "Your messages, your questions, your frequency. The mailbag opens."
-    host: "liminal_operator"
-    topic_focus: "listeners"
-    segment_types: ["listener_mailbag", "deep_dive", "story"]
-    bumper_style: "soul"
-    voices:
-      host: "am_michael"
-
-
-# Weekly schedule.
-# - `base` applies every day.
-# - `overrides` replace the base when day+time match.
+# Weekday schedule (Mon–Thu). Day-of-week support + Fri/weekend TBD (REG-123, REG-127).
 schedule:
   base:
-    - start: "00:00"
-      end: "04:00"
-      show: "midnight_signal"
-    - start: "04:00"
-      end: "06:00"
-      show: "the_night_garden"
     - start: "06:00"
-      end: "09:00"
-      show: "dawn_chorus"
-    - start: "09:00"
-      end: "12:00"
-      show: "sonic_archaeology"
-    - start: "12:00"
-      end: "14:00"
-      show: "signal_report"
-    - start: "14:00"
-      end: "16:00"
-      show: "the_groove_lab"
-    - start: "16:00"
-      end: "18:00"
-      show: "crosswire"
-    - start: "18:00"
+      end: "10:00"
+      show: "morning"
+    - start: "10:00"
+      end: "15:00"
+      show: "midday"
+    - start: "15:00"
       end: "20:00"
-      show: "sonic_archaeology"
+      show: "prime_time"
     - start: "20:00"
       end: "22:00"
-      show: "the_groove_lab"
+      show: "wind_down"
     - start: "22:00"
-      end: "00:00"
-      show: "the_night_garden"
-
-  overrides:
-    - days: ["sun"]
-      start: "18:00"
-      end: "20:00"
-      show: "listener_hours"
+      end: "06:00"
+      show: "late_night"

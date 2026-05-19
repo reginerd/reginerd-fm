@@ -4,8 +4,6 @@ __pycache__/
 *.pyc
 .python-version
 
-# Chatterbox venv (separate from main)
-mac/chatterbox/.venv/
 
 # Output files (generated content — never commit)
 output/segments/
