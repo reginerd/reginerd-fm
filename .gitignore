@@ -33,6 +33,7 @@ command.txt
 README-dev.md
 
 # Local config with secrets
+.env
 mac/config.yaml
 config/icecast.xml
 

@@ -12,19 +12,19 @@ plex:
 # NAS mount path (where Plex music files are accessible on this machine)
 nas_mount: /Volumes/music        # Adjust to your actual mount path
 
-# LLM settings (Claude API)
+# LLM settings (Qwen14B via Hermes on Mac Studio)
 llm:
+  base_url: http://localhost:11434/v1  # Hermes/Ollama endpoint
+  model: qwen2.5:14b
   timeout: 60
   temperature: 0.8
   max_tokens: 300
 
-# TTS — ElevenLabs (primary) + Kokoro (fallback)
+# TTS — ElevenLabs (pre-generated nightly, not real-time)
 tts:
   elevenlabs:
-    voice_id_env: ELEVENLABS_VOICE_ID   # Set in .env after voice clone is ready
+    voice_id_env: ELEVENLABS_VOICE_ID   # Set in .env after voice clone is ready (REG-128)
     api_key_env: ELEVENLABS_API_KEY
-  kokoro:
-    voice: "af_heart"                   # Fallback voice
 
 # Icecast streaming server
 icecast:
