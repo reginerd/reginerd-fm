@@ -6,6 +6,10 @@ set -euo pipefail
 
 RADIO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$RADIO_DIR"
+
+# Load secrets (.env not sourced by launchd)
+[[ -f .env ]] && { set -a; source .env; set +a; }
+
 eval "$(uv run python mac/station_config.py --env)"
 INTERVAL_SECONDS="${WRIT_OPERATOR_INTERVAL_SECONDS:-900}"
 

@@ -10,6 +10,9 @@ export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOM
 PROJECT_ROOT="$(cd "$(dirname "$0")" && pwd)"
 cd "$PROJECT_ROOT"
 
+# Load secrets (.env not sourced by launchd or cron)
+[[ -f .env ]] && { set -a; source .env; set +a; }
+
 eval "$(uv run python mac/station_config.py --env)"
 
 LOG_DIR="${WRIT_OUTPUT_DIR:-output}"

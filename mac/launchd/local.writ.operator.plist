@@ -4,13 +4,13 @@
 <plist version="1.0">
 <dict>
   <key>Label</key>
-  <string>local.writ.operator</string>
+  <string>local.rgnrd.operator</string>
 
   <key>ProgramArguments</key>
   <array>
     <string>/bin/bash</string>
     <string>-lc</string>
-    <string>export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.local/bin"; cd "${WRIT_HOME:-$HOME/wvoid-fm}" &amp;&amp; mkdir -p "$HOME/Library/Logs/writ" &amp;&amp; exec bash mac/operator_daemon.sh &gt;&gt; "$HOME/Library/Logs/writ/operator_launchd.log" 2&gt;&gt; "$HOME/Library/Logs/writ/operator_launchd.err.log"</string>
+    <string>export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.local/bin"; cd "${WRIT_HOME:-$HOME/reginerd-fm}" &amp;&amp; mkdir -p "$HOME/Library/Logs/rgnrd" &amp;&amp; exec bash mac/operator_daemon.sh &gt;&gt; "$HOME/Library/Logs/rgnrd/operator_launchd.log" 2&gt;&gt; "$HOME/Library/Logs/rgnrd/operator_launchd.err.log"</string>
   </array>
 
   <key>RunAtLoad</key>
