@@ -1,0 +1,31 @@
+# RGNRD-FM Genre → Show Block Mapping
+# Maps each show block to the Plex genres it should pull from.
+# Genre names must match exactly what's in your Plex library (case-sensitive).
+#
+# To see available genres: uv run python mac/plex_music_feeder.py --genres
+
+show_genres:
+  morning:
+    - "R&B"
+    - "Easy Listening"
+    - "Jazz"
+    - "Vocal"
+
+  midday:
+    - "Pop/Rock"
+    - "Reggae"
+    - "Folk"
+    - "Electronic"
+    - "Country"
+
+  prime_time:
+    - "Rap"
+    - "R&B"
+
+  wind_down:
+    - "Jazz"
+    - "Easy Listening"
+    - "Electronic"
+
+  late_night:
+    - "Stage & Screen"

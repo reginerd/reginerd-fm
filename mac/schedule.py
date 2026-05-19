@@ -32,6 +32,8 @@ VALID_SEGMENT_TYPES = {
     "deep_dive", "news_analysis", "interview", "panel", "story",
     "listener_mailbag", "listener_response", "music_essay",
     "station_id", "show_intro", "show_outro",
+    # RGNRD-FM music-forward types
+    "track_intro", "track_outro", "deep_cut", "game_context",
 }
 
 

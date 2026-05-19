@@ -7,6 +7,7 @@ plex:
   port: 32400
   token_env: PLEX_TOKEN          # Set PLEX_TOKEN in .env
   library_section: 1             # Music library section key
+  music_prefix: /volume1/music   # Path prefix Plex uses on the NAS (Synology default)
 
 # NAS mount path (where Plex music files are accessible on this machine)
 nas_mount: /Volumes/music        # Adjust to your actual mount path
