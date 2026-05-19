@@ -69,25 +69,44 @@ if [ -f "$NOW_PLAYING" ]; then
     [ -n "$H" ] && HOST="$H"
 fi
 
-# Resolve title from the current track path
+# Resolve artist and title from the current track path
+ARTIST="$HOST"
 if [ -n "$CURRENT" ] && [ -f "$CURRENT" ]; then
-    TITLE=$(name_of "$CURRENT")
     BASENAME=$(basename "$CURRENT")
     EXT="${BASENAME##*.}"
     STEM="${BASENAME%.*}"
     META_FILE="$(dirname "$CURRENT")/$STEM.json"
-    # Bumpers ship sidecar JSON with a curated display_name; prefer it.
-    if [ "$EXT" != "wav" ] && [ -f "$META_FILE" ]; then
-        DISPLAY=$(json_field "$META_FILE" display_name 2>/dev/null || true)
-        [ -n "$DISPLAY" ] && TITLE="$DISPLAY"
-    fi
+
+    case "$CURRENT" in
+        */music_bumpers/*)
+            # Plex files use Artist__Title filename convention from plex_music_feeder.py.
+            # Split on the first __ and replace underscores with spaces.
+            ARTIST_RAW="${STEM%%__*}"
+            TITLE_RAW="${STEM#*__}"
+            ARTIST=$(printf '%s' "$ARTIST_RAW" | tr '_' ' ')
+            TITLE=$(printf '%s' "$TITLE_RAW"  | tr '_' ' ')
+            # Sidecar JSON display_name overrides if present
+            if [ -f "$META_FILE" ]; then
+                DISPLAY=$(json_field "$META_FILE" display_name 2>/dev/null || true)
+                [ -n "$DISPLAY" ] && TITLE="$DISPLAY"
+            fi
+            ;;
+        *)
+            TITLE=$(name_of "$CURRENT")
+            # Sidecar JSON display_name overrides if present
+            if [ "$EXT" != "wav" ] && [ -f "$META_FILE" ]; then
+                DISPLAY=$(json_field "$META_FILE" display_name 2>/dev/null || true)
+                [ -n "$DISPLAY" ] && TITLE="$DISPLAY"
+            fi
+            ;;
+    esac
 else
     TITLE="$CALL_SIGN"
 fi
 
 # Respond to ezstream's invocation mode
 case "${1:-}" in
-    artist) printf '%s\n' "$HOST" ;;
+    artist) printf '%s\n' "$ARTIST" ;;
     title)  printf '%s\n' "$TITLE" ;;
-    *)      printf '%s - %s\n' "$HOST" "$TITLE" ;;
+    *)      printf '%s - %s\n' "$ARTIST" "$TITLE" ;;
 esac
