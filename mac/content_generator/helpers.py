@@ -235,6 +235,90 @@ def format_headlines(headlines: list[dict], max_items: int | None = None) -> str
 _PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _KOKORO_DIR = _PROJECT_ROOT / "mac" / "kokoro"
 _KOKORO_PYTHON = _KOKORO_DIR / ".venv" / "bin" / "python"
+_KOKORO_VOICE_RE = re.compile(r'^[ab][mf]_')
+
+_ELEVENLABS_MODEL = "eleven_turbo_v2_5"
+_ELEVENLABS_CHUNK_CHARS = 2000
+
+
+def _resolve_elevenlabs_voice_id(voice_name: str) -> str | None:
+    """Map a voice alias to an ElevenLabs voice ID via env vars."""
+    if voice_name == "reginerd_clone":
+        return (
+            os.environ.get("ELEVENLABS_VOICE_ID", "").strip() or
+            os.environ.get("ELEVENLABS_PLACEHOLDER_VOICE_ID", "").strip() or
+            None
+        )
+    if not _KOKORO_VOICE_RE.match(voice_name) and len(voice_name) > 10:
+        return voice_name
+    return None
+
+
+def render_elevenlabs(text: str, output_path: Path, voice_id: str, api_key: str) -> bool:
+    """Render text to WAV using ElevenLabs TTS, chunking if needed."""
+    import shutil
+    import tempfile
+    try:
+        from elevenlabs.client import ElevenLabs
+    except ImportError:
+        log("ElevenLabs SDK not installed")
+        return False
+
+    client = ElevenLabs(api_key=api_key)
+
+    if len(text) <= _ELEVENLABS_CHUNK_CHARS:
+        chunks = [text]
+    else:
+        sentences = re.split(r'(?<=[.!?])\s+', text)
+        chunks = []
+        current = ""
+        for sentence in sentences:
+            if len(current) + len(sentence) + 1 > _ELEVENLABS_CHUNK_CHARS and current:
+                chunks.append(current.strip())
+                current = sentence
+            else:
+                current = (current + " " + sentence).strip() if current else sentence
+        if current:
+            chunks.append(current)
+
+    tmp_dir = Path(tempfile.mkdtemp(prefix="writ_el_"))
+    chunk_files: list[Path] = []
+
+    try:
+        for i, chunk in enumerate(chunks):
+            mp3_path = tmp_dir / f"chunk{i:03d}.mp3"
+            wav_path = tmp_dir / f"chunk{i:03d}.wav"
+            try:
+                audio_gen = client.text_to_speech.convert(
+                    voice_id=voice_id,
+                    text=chunk,
+                    model_id=_ELEVENLABS_MODEL,
+                    output_format="mp3_44100_128",
+                )
+                mp3_path.write_bytes(b"".join(audio_gen))
+            except Exception as e:
+                log(f"ElevenLabs API error on chunk {i}: {e}")
+                continue
+
+            result = subprocess.run(
+                ["ffmpeg", "-y", "-i", str(mp3_path), "-ar", "24000", "-ac", "1", str(wav_path)],
+                capture_output=True, timeout=60,
+            )
+            if result.returncode == 0 and wav_path.exists():
+                chunk_files.append(wav_path)
+
+        if not chunk_files:
+            log("ElevenLabs: no chunks rendered")
+            return False
+
+        if len(chunk_files) == 1:
+            shutil.move(str(chunk_files[0]), str(output_path))
+            return output_path.exists()
+
+        return concatenate_audio(chunk_files, output_path)
+
+    finally:
+        shutil.rmtree(tmp_dir, ignore_errors=True)
 
 
 def get_audio_duration(filepath: Path) -> float | None:
@@ -345,7 +429,24 @@ def concatenate_audio(chunk_files: list[Path], output_path: Path, gap_seconds: f
 
 
 def render_single_voice(text: str, output_path: Path, voice: str) -> bool:
-    """Render a single-voice script to audio, chunking for long content."""
+    """Render a single-voice script to audio.
+
+    Routes to ElevenLabs for non-Kokoro voices (e.g. reginerd_clone) when
+    ELEVENLABS_API_KEY is set; falls back to Kokoro am_michael otherwise.
+    Kokoro voices (af_*/am_*/bf_*/bm_*) always go through Kokoro.
+    """
+    if not _KOKORO_VOICE_RE.match(voice):
+        api_key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
+        if api_key:
+            voice_id = _resolve_elevenlabs_voice_id(voice)
+            if voice_id:
+                log(f"  ElevenLabs: voice={voice_id[:8]}...")
+                return render_elevenlabs(text, output_path, voice_id, api_key)
+            log(f"  No ElevenLabs voice ID for '{voice}', falling back to Kokoro")
+        else:
+            log(f"  No ELEVENLABS_API_KEY, falling back to Kokoro for '{voice}'")
+        voice = "am_michael"
+
     MAX_CHUNK_WORDS = 100
     words = text.split()
 

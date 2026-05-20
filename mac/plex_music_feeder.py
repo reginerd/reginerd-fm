@@ -17,6 +17,7 @@ Usage:
 from __future__ import annotations
 
 import argparse
+import json
 import os
 import random
 import re
@@ -207,6 +208,15 @@ def stock_show(
             continue
 
         link_path.symlink_to(src)
+        json_path = link_path.with_suffix(".json")
+        if not json_path.exists():
+            json_path.write_text(json.dumps({
+                "title": track["title"],
+                "artist": track["artist"],
+                "album": track.get("album", ""),
+                "year": str(track.get("year", "")),
+                "display_name": f"{track['artist']} - {track['title']}",
+            }, indent=2))
         print(f"    + {track['artist']} — {track['title']}")
         added += 1
 

@@ -9,6 +9,7 @@ shows:
     name: "Morning"
     description: "R&B, Soul, and Jazz to start the day right."
     host: "reginerd"
+    topic_focus: "soul_music"
     genres: ["R&B", "Easy Listening", "Jazz", "Vocal"]
     segment_types: ["track_intro", "track_outro", "station_id"]
     voices:
@@ -18,6 +19,7 @@ shows:
     name: "Midday"
     description: "Eclectic mix — Pop/Rock, Reggae, Folk, Electronic."
     host: "reginerd"
+    topic_focus: "music_history"
     genres: ["Pop/Rock", "Reggae", "Folk", "Electronic", "Country"]
     segment_types: ["track_intro", "track_outro", "station_id"]
     voices:
@@ -27,6 +29,7 @@ shows:
     name: "Prime Time"
     description: "Rap and R&B. Regional focus — Bay, LA, ATL, NY."
     host: "reginerd"
+    topic_focus: "rap"
     genres: ["Rap", "R&B"]
     segment_types: ["track_intro", "track_outro", "station_id", "deep_cut"]
     voices:
@@ -36,6 +39,7 @@ shows:
     name: "Wind Down"
     description: "Instrumentals and chill. The day slows down."
     host: "reginerd"
+    topic_focus: "night_philosophy"
     genres: ["Jazz", "Easy Listening", "Electronic"]
     segment_types: ["track_intro", "track_outro"]
     voices:
@@ -45,6 +49,7 @@ shows:
     name: "Late Night"
     description: "Stage & Screen — video game and film soundtracks. reginerd's gaming zone."
     host: "reginerd"
+    topic_focus: "vgm"
     genres: ["Stage & Screen"]
     segment_types: ["track_intro", "track_outro", "game_context"]
     voices:

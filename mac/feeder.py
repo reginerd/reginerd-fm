@@ -61,6 +61,14 @@ SCHEDULE_PATH = STATION.schedule_path
 ARCHIVE_DIR = STATION.archive_dir
 
 try:
+    from track_intro_gen import get_intro_path as _get_intro_path
+    INTROS_ENABLED = True
+except ImportError:
+    INTROS_ENABLED = False
+    def _get_intro_path(bumper_path, show_id):  # noqa: E306
+        return None
+
+try:
     from play_history import get_history
     HISTORY_ENABLED = True
 except ImportError:
@@ -325,45 +333,71 @@ def write_now_playing(info: dict):
             pass
 
 
-def describe_track(filepath: Path) -> tuple[str, str]:
-    """Return (display_name, track_type) for a track path."""
+def parse_bumper_filename(stem: str) -> tuple[str, str]:
+    """Parse 'Artist__Track_Name' filename stem into (artist, track)."""
+    if "__" in stem:
+        artist_raw, track_raw = stem.split("__", 1)
+        artist = artist_raw.replace("_", " ").strip()
+        track = track_raw.replace("__", " ").replace("_", " ").strip()
+        return artist, track
+    return "", stem.replace("_", " ").strip()
+
+
+def describe_track(filepath: Path) -> tuple[str, str, str | None]:
+    """Return (display_name, track_type, artist) for a track path."""
     s = str(filepath)
     if "music_bumpers" in s:
         meta_path = filepath.with_suffix(".json")
-        name = "AI Music"
         if meta_path.exists():
             try:
                 m = json.loads(meta_path.read_text())
-                name = m.get("display_name", name)
+                name = m.get("display_name", "")
+                artist = m.get("artist") or None
+                if name:
+                    return name, "bumper", artist
             except Exception:
                 pass
-        return name, "bumper"
+        artist, track = parse_bumper_filename(filepath.stem)
+        name = f"{artist} - {track}" if artist else track
+        return name, "bumper", artist or None
     if "talk_segments" in s:
-        return clean_name(filepath), "talk"
+        return clean_name(filepath), "talk", None
     if "silence" in filepath.name.lower():
-        return "Silence", "silence"
-    return clean_name(filepath), "unknown"
+        return "Silence", "silence", None
+    return clean_name(filepath), "unknown", None
 
 
 def make_bumper_entry(filepath: Path) -> dict:
     meta_path = filepath.with_suffix(".json")
-    name = "AI Music"
     if meta_path.exists():
         try:
             m = json.loads(meta_path.read_text())
-            name = m.get("display_name", name)
+            name = m.get("display_name", "")
+            if name:
+                return {"path": str(filepath), "type": "bumper", "name": name, "artist": m.get("artist")}
         except Exception:
             pass
-    return {"path": str(filepath), "type": "bumper", "name": name}
+    artist, track = parse_bumper_filename(filepath.stem)
+    name = f"{artist} - {track}" if artist else track
+    return {"path": str(filepath), "type": "bumper", "name": name, "artist": artist or None}
 
 
-def append_bumpers(entries: list[dict], bumpers: list[Path], start_idx: int, count: int) -> int:
+def _add_bumper_entry(entries: list[dict], filepath: Path, show_id: str) -> None:
+    """Append a bumper entry, preceded by its track intro if one has been pre-generated."""
+    if INTROS_ENABLED:
+        intro = _get_intro_path(filepath, show_id)
+        if intro is not None and intro.exists():
+            entries.append({"path": str(intro), "type": "track_intro", "name": "Coming Up"})
+    entries.append(make_bumper_entry(filepath))
+
+
+def append_bumpers(entries: list[dict], bumpers: list[Path], start_idx: int, count: int, show_id: str = "") -> int:
     """Append up to count bumpers from start_idx and return the next index."""
     bumper_idx = start_idx
     for _ in range(count):
         if bumper_idx >= len(bumpers):
             break
-        entries.append(make_bumper_entry(bumpers[bumper_idx]))
+        _add_bumper_entry(entries, bumpers[bumper_idx], show_id)
         bumper_idx += 1
     return bumper_idx
 
@@ -373,12 +407,13 @@ def record_play(filepath: str, show_id: str):
     if not HISTORY_ENABLED:
         return
     try:
-        name, track_type = describe_track(Path(filepath))
+        name, track_type, artist = describe_track(Path(filepath))
         if track_type == "silence":
             return
         get_history().record_play(
             filepath=filepath,
             track_name=name,
+            artist=artist,
             vibe=track_type,
             time_period=show_id,
             listeners=get_listener_count(),
@@ -421,19 +456,19 @@ def build_playlist(show_id: str, slot: str) -> list[dict]:
     if not talks:
         # No talk, stay music-forward and keep silence only as the playlist tail.
         for b in bumpers[:MUSIC_ONLY_TRACK_LIMIT]:
-            entries.append(make_bumper_entry(b))
+            _add_bumper_entry(entries, b, show_id)
         entries.append({"path": str(SILENCE_FILE), "type": "silence", "name": "Silence"})
         return entries
 
     # Music-forward flow: lead with music, then use talk as hosted breaks between
     # larger music blocks.
     lead_in = random.randint(*MUSIC_LEAD_IN_BUMPERS_RANGE)
-    bumper_idx = append_bumpers(entries, bumpers, bumper_idx, lead_in)
+    bumper_idx = append_bumpers(entries, bumpers, bumper_idx, lead_in, show_id)
 
     for talk in talks:
         entries.append({"path": str(talk), "type": "talk", "name": clean_name(talk)})
         n_bumpers = random.randint(*MUSIC_BUMPERS_AFTER_TALK_RANGE)
-        bumper_idx = append_bumpers(entries, bumpers, bumper_idx, n_bumpers)
+        bumper_idx = append_bumpers(entries, bumpers, bumper_idx, n_bumpers, show_id)
 
     return entries
 
@@ -559,26 +594,30 @@ def run():
 
             track_name: str | None = None
             track_type: str | None = None
+            track_artist: str | None = None
             current_path_obj = Path(current_path) if current_path else None
             if current_path_obj and current_path_obj.is_absolute() and current_path_obj.exists():
                 try:
-                    track_name, track_type = describe_track(current_path_obj)
+                    track_name, track_type, track_artist = describe_track(current_path_obj)
                 except Exception:
-                    track_name, track_type = None, None
+                    track_name, track_type, track_artist = None, None, None
 
             if track_name is None:
                 if playlist_entries:
                     track_name = playlist_entries[0]["name"]
                     track_type = playlist_entries[0]["type"]
+                    track_artist = playlist_entries[0].get("artist")
                 else:
                     track_name = show["show_name"]
                     track_type = "silence"
+                    track_artist = None
 
             np_info = {
                 "station_id": STATION.id,
                 "station": STATION.call_sign,
                 "mount": STATION.stream.mount,
                 "track": track_name,
+                "artist": track_artist,
                 "type": track_type,
                 "show_id": show["show_id"],
                 "show": show["show_name"],
@@ -661,7 +700,8 @@ def write_ezstream_config() -> Path:
       <port>{STATION.stream.icecast_port}</port>
       <password>{html.escape(STATION.stream.source_password)}</password>
       <tls>None</tls>
-      <reconnect_attempts>0</reconnect_attempts>
+      <reconnect_attempts>10</reconnect_attempts>
+      <reconnect_delay>5</reconnect_delay>
     </server>
   </servers>
 

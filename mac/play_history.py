@@ -6,17 +6,22 @@ Tracks all played tracks to prevent repeats and enable analytics.
 Uses SQLite for persistent storage.
 """
 
+import csv
 import json
 import sqlite3
 import sys
+from datetime import datetime
 from pathlib import Path
 from typing import Optional
 
 sys.path.insert(0, str(Path(__file__).resolve().parent))
 from station_config import load_station_config  # noqa: E402
 
-# Default database location
-DEFAULT_DB_PATH = load_station_config().history_db_path
+_STATION = load_station_config()
+DEFAULT_DB_PATH = _STATION.history_db_path
+DEFAULT_CSV_PATH = _STATION.history_db_path.parent / "play_history.csv"
+
+_CSV_FIELDS = ["played_at", "artist", "track", "show", "type", "listeners"]
 
 
 class PlayHistory:
@@ -59,7 +64,8 @@ class PlayHistory:
         time_period: str = None,
         listeners: int = 0,
     ):
-        """Record a track play."""
+        """Record a track play to SQLite and append to CSV."""
+        now = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
         with sqlite3.connect(self.db_path) as conn:
             conn.execute(
                 """
@@ -69,6 +75,21 @@ class PlayHistory:
                 (filepath, track_name, artist, vibe, time_period, listeners),
             )
             conn.commit()
+
+        csv_path = DEFAULT_CSV_PATH
+        write_header = not csv_path.exists()
+        with open(csv_path, "a", newline="", encoding="utf-8") as f:
+            writer = csv.DictWriter(f, fieldnames=_CSV_FIELDS)
+            if write_header:
+                writer.writeheader()
+            writer.writerow({
+                "played_at": now,
+                "artist": artist or "",
+                "track": track_name or "",
+                "show": time_period or "",
+                "type": vibe or "",
+                "listeners": listeners,
+            })
 
     def get_recent_plays(self, limit: int = 50) -> list[dict]:
         """Get recent plays."""
@@ -226,7 +247,15 @@ if __name__ == "__main__":
         limit = int(sys.argv[2]) if len(sys.argv) > 2 else 20
         plays = history.get_recent_plays(limit)
         for p in plays:
-            print(f"{p['played_at'][:19]} | {p['track_name'] or p['filepath']}")
+            track = p["track_name"] or p["filepath"]
+            artist = p.get("artist")
+            show = p.get("time_period", "")
+            line = f"{p['played_at'][:19]}  {track}"
+            if artist and artist not in track:
+                line = f"{p['played_at'][:19]}  {artist} — {track}"
+            if show:
+                line += f"  [{show}]"
+            print(line)
 
     elif cmd == "most_played":
         limit = int(sys.argv[2]) if len(sys.argv) > 2 else 10

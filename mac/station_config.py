@@ -106,6 +106,10 @@ class StationConfig:
         return self.output_dir / "music_bumpers"
 
     @property
+    def intro_dir(self) -> Path:
+        return self.output_dir / "track_intros"
+
+    @property
     def archive_dir(self) -> Path:
         return self.output_dir / "archive"
 

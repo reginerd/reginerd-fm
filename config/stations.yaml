@@ -2,7 +2,7 @@ default_station: rgnrd-fm
 
 stations:
   rgnrd-fm:
-    call_sign: RGNRD-FM
+    call_sign: REGINERD-FM
     agent:
       kind: claude
       command: claude
@@ -17,6 +17,6 @@ stations:
       api_port: 8001
       source_password_env: RGNRD_SOURCE_PASSWORD
       source_password: rgnrd_source_2024
-      stream_name: RGNRD-FM
+      stream_name: REGINERD-FM
       stream_genre: Hip-Hop / R&B / VGM
       stream_description: reginerd's record collection, on the air 24/7

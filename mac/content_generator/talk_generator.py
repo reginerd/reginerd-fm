@@ -43,7 +43,7 @@ sys.path.insert(0, str(Path(__file__).parent))
 
 from helpers import (
     log, preprocess_for_tts, fetch_headlines, format_headlines, run_claude,
-    render_kokoro, render_single_voice, concatenate_audio, get_audio_duration,
+    render_single_voice, concatenate_audio, get_audio_duration,
 )
 
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
@@ -64,6 +64,7 @@ from persona import build_host_prompt  # noqa: E402
 from context import load_intent, format_prompt_context  # noqa: E402
 from ledger import append_event, event_id  # noqa: E402
 from topic_bank import merge_topic_pools  # noqa: E402
+from lastfm_context import format_for_prompt as lastfm_format_for_prompt  # noqa: E402
 
 # =============================================================================
 # SEGMENT TYPE DEFINITIONS
@@ -225,6 +226,60 @@ TOPIC_POOLS = {
         "Funk as philosophy - Parliament and the mothership connection",
         "Erykah Badu and the church of vibe",
         "Disco's death and resurrection - who killed the dance floor and who brought it back",
+    ],
+    "rap": [
+        "E-40 as an institution — why the Bay made him forever",
+        "Mac Dre and the Thizz culture that took over the West",
+        "How Oakland shaped national rap while getting overlooked",
+        "Kendrick's good kid, m.A.A.d city as a film you can only hear",
+        "J Dilla's drumming and why it changed the feel of everything",
+        "Outkast's ATLiens — when Southern rap started sounding like science fiction",
+        "A Tribe Called Quest and the jazz-rap vocabulary that still holds",
+        "Nipsey Hussle and the marathon — ownership as a philosophy",
+        "The Alchemist as the working producer's producer",
+        "Jay-Z's American Gangster — the most underrated album in his catalog",
+        "Madlib's lo-fi universe and the beatmaking underground",
+        "How Nas's Illmatic pulled off production-by-committee and still sounded seamless",
+        "Hieroglyphics and the alternative Bay Area that never crossed over nationally",
+        "The Too $hort catalog and what four decades of persistence teaches",
+        "Andre 3000's solo arc — the artist who chose mystique over output",
+        "How Bay Area hyphy moved the culture before the internet could spread it",
+        "The East/West rivalry revisited — what it cost and what it built",
+        "Sounwave and the production philosophy behind Kendrick's peak run",
+        "How rap changed R&B's tempo and emotional range",
+        "Drake's sample-flip formula and what it means to weaponize nostalgia",
+        "SZA bridging neo-soul and rap — the sound that unlocked a generation",
+        "Ghostface Killah and the Fishscale year — when Wu came back hard",
+        "The soul sample and what makes a flip feel earned versus borrowed",
+        "Ice Cube's post-NWA solo run and why AmeriKKKa's Most Wanted still hits",
+        "The Bay's relationship with trunk music and what it owes to funk",
+    ],
+    "vgm": [
+        "Koji Kondo and the Nintendo sound design language that shaped childhoods",
+        "Nobuo Uematsu and the emotion he wrote into 16-bit hardware",
+        "Yasunori Mitsuda's Chrono Trigger — one of the most perfect game soundtracks",
+        "How Doom's metal soundtrack changed what was allowed in games",
+        "Akira Yamaoka's Silent Hill ambient horror and what it owes to industrial music",
+        "Persona 5's jazz-hip-hop hybrid and why it felt like a statement",
+        "The NieR Automata score and the three different emotional universes it inhabits",
+        "David Wise and the Donkey Kong Country ambient wonder nobody expected",
+        "How chiptune became a genre that outlived its hardware",
+        "The Breath of the Wild minimalist score — when silence is the instrument",
+        "Final Fantasy XIV and the most ambitious ongoing soundtrack in gaming",
+        "Mass Effect's electronic underscore and how ambient music built a universe",
+        "Undertale's sans theme — why simple melodies cut the deepest",
+        "How Shadow of the Colossus made orchestral drama feel like gameplay",
+        "Yoko Shimomura's Kingdom Hearts nostalgia machine and what she built it from",
+        "The Mega Man series and its influence on electronic and chiptune music",
+        "How looping as a constraint shaped game music's compositional DNA",
+        "The Red Dead Redemption 2 score — country, folk, and frontier atmosphere",
+        "Celeste's composer and how emotional shorthand works in indie game music",
+        "The Earthbound soundtrack and what sampling found in unexpected places",
+        "Super Mario Odyssey mixing jazz, folk, and pop — Nintendo letting loose",
+        "VGM concerts and why game music moved to symphony halls",
+        "The Chrono Cross opening and what makes a title screen unforgettable",
+        "How Halo's choir built a mythology before you loaded the first level",
+        "What video game music teaches about writing for a moving image you don't control",
     ],
     "night_philosophy": [
         "What the dark knows that the light doesn't",
@@ -987,6 +1042,12 @@ def build_generation_prompt(
     # suggestion-bank rather than an avoid-list (cross-batch anchoring).
     # The episode planner still uses show_log where continuity matters.
 
+    # Last.fm listening context — personal anecdote fuel
+    if segment_type in ("deep_dive", "music_essay", "story", "show_intro", "station_id", "show_outro"):
+        lastfm = lastfm_format_for_prompt()
+        if lastfm:
+            context_parts.append(lastfm)
+
     # Listener messages — real voices from the audience
     if segment_type in ("listener_mailbag", "show_intro", "deep_dive"):
         messages = format_messages_for_prompt()
@@ -1107,16 +1168,8 @@ def render_multi_voice(script: str, output_path: Path, voices: dict[str, str]) -
         if not text.strip():
             continue
 
-        # Render in sub-chunks if long
-        if len(text.split()) > 100:
-            if render_single_voice(text, chunk_path, voice):
-                chunk_files.append(chunk_path)
-        else:
-            for attempt in range(2):
-                if render_kokoro(text, chunk_path, voice):
-                    chunk_files.append(chunk_path)
-                    break
-                time.sleep(2)
+        if render_single_voice(text, chunk_path, voice):
+            chunk_files.append(chunk_path)
 
     if not chunk_files:
         log("  No dialogue parts rendered")
