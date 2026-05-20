@@ -10,6 +10,8 @@ Usage:
     uv run python mac/plex_music_feeder.py --all --full
     uv run python mac/plex_music_feeder.py --all --min 20
     uv run python mac/plex_music_feeder.py --show prime_time --count 10
+    uv run python mac/plex_music_feeder.py --clean --show wind_down
+    uv run python mac/plex_music_feeder.py --show wind_down --full --use-tags -v
     uv run python mac/plex_music_feeder.py --status
     uv run python mac/plex_music_feeder.py --genres
 """
@@ -38,6 +40,7 @@ BUMPER_DIR = STATION.bumper_dir
 
 CONFIG_PATH = PROJECT_ROOT / "mac" / "config.yaml"
 GENRES_CONFIG_PATH = PROJECT_ROOT / "config" / "genres.yaml"
+BLOCKS_CONFIG_PATH = PROJECT_ROOT / "config" / "blocks.yaml"
 
 AUDIO_SUFFIXES = {".flac", ".mp3", ".wav", ".m4a"}
 
@@ -53,6 +56,12 @@ def load_config() -> dict:
 
 def load_genres_config() -> dict:
     return yaml.safe_load(GENRES_CONFIG_PATH.read_text())
+
+
+def load_blocks_config() -> dict:
+    if not BLOCKS_CONFIG_PATH.exists():
+        return {}
+    return yaml.safe_load(BLOCKS_CONFIG_PATH.read_text()) or {}
 
 
 def _safe_filename(text: str) -> str:
@@ -149,6 +158,9 @@ def stock_show(
     min_tracks: int,
     count: int | None,
     full: bool = False,
+    blocks_config: dict | None = None,
+    use_tags: bool = False,
+    verbose: bool = False,
 ) -> int:
     """Symlink tracks for a show. Returns number of new symlinks created."""
     show_dir = BUMPER_DIR / show_id
@@ -185,6 +197,57 @@ def stock_show(
     if not candidates:
         print(f"    No tracks found for {show_id}")
         return 0
+
+    # --- Phase 1: blocked_artists filter ---
+    block_cfg = (blocks_config or {}).get(show_id, {})
+    blocked_artists = {a.lower() for a in block_cfg.get("blocked_artists", [])}
+    if blocked_artists:
+        before = len(candidates)
+        candidates = [t for t in candidates if t["artist"].lower() not in blocked_artists]
+        removed = before - len(candidates)
+        if removed:
+            print(f"    Filtered {removed} tracks by blocked_artists for {show_id}")
+
+    # --- Phase 2: Last.fm tag filter (--use-tags) ---
+    if use_tags:
+        from content_generator.artist_tags import get_artist_tags
+
+        tag_cfg = block_cfg.get("lastfm_tags", {})
+        allowed_tags = {t.lower() for t in tag_cfg.get("allowed", [])}
+        blocked_tags = {t.lower() for t in tag_cfg.get("blocked", [])}
+
+        if allowed_tags or blocked_tags:
+            filtered = []
+            for track in candidates:
+                tags = get_artist_tags(track["artist"])
+                if verbose:
+                    tag_str = ", ".join(tags) if tags else "(no tags)"
+                    print(f"    [{track['artist']}] {tag_str}")
+
+                if not tags:
+                    # Fail-open: no tags from Last.fm → include the track
+                    filtered.append(track)
+                    continue
+
+                tag_set = set(tags)
+
+                if blocked_tags and tag_set & blocked_tags:
+                    if verbose:
+                        matched = tag_set & blocked_tags
+                        print(f"      -> BLOCKED ({', '.join(sorted(matched))})")
+                    continue
+
+                if allowed_tags and not (tag_set & allowed_tags):
+                    if verbose:
+                        print(f"      -> EXCLUDED (no allowed tags matched)")
+                    continue
+
+                filtered.append(track)
+
+            removed = len(candidates) - len(filtered)
+            if removed:
+                print(f"    Tag-filtered {removed} tracks for {show_id}")
+            candidates = filtered
 
     existing_targets = {str(f.resolve()) for f in existing if f.is_symlink()}
     candidates = [t for t in candidates if str(t["file"].resolve()) not in existing_targets]
@@ -240,6 +303,55 @@ def cmd_status(genres_config: dict) -> None:
         print(f"  {show_id:<20} {len(valid)} tracks{note}")
 
 
+def _artist_from_filename(stem: str) -> str:
+    """Extract artist from symlink filename: Artist__Title → artist (lowercase, _ → space)."""
+    parts = stem.split("__", 1)
+    return parts[0].replace("_", " ").lower() if parts else ""
+
+
+def cmd_clean(show_id: str, blocks_config: dict) -> int:
+    """Remove symlinks for blocked_artists. No Plex needed.
+
+    Reads artist from .json sidecar if present, falls back to filename parsing.
+    """
+    show_dir = BUMPER_DIR / show_id
+    if not show_dir.exists():
+        print(f"  {show_id}: directory not found")
+        return 0
+
+    block_cfg = blocks_config.get(show_id, {})
+    blocked_artists = {a.lower() for a in block_cfg.get("blocked_artists", [])}
+    if not blocked_artists:
+        print(f"  {show_id}: no blocked_artists configured")
+        return 0
+
+    removed = 0
+    for f in show_dir.iterdir():
+        if f.suffix.lower() not in AUDIO_SUFFIXES:
+            continue
+
+        # Prefer .json sidecar (exact artist name); fall back to filename parsing
+        json_path = f.with_suffix(".json")
+        artist = ""
+        if json_path.exists():
+            try:
+                artist = json.loads(json_path.read_text()).get("artist", "").lower()
+            except Exception:
+                pass
+        if not artist:
+            artist = _artist_from_filename(f.stem)
+
+        if artist in blocked_artists:
+            print(f"    - {f.name}")
+            f.unlink()
+            if json_path.exists():
+                json_path.unlink()
+            removed += 1
+
+    print(f"  {show_id}: removed {removed} symlinks")
+    return removed
+
+
 def main() -> int:
     parser = argparse.ArgumentParser(
         description="Stock RGNRD-FM music queue from Plex",
@@ -251,15 +363,37 @@ def main() -> int:
     group.add_argument("--all", action="store_true", help="Stock all show blocks")
     group.add_argument("--status", action="store_true", help="Show queue status (no Plex needed)")
     group.add_argument("--genres", action="store_true", help="List available Plex genres")
+    parser.add_argument("--clean", action="store_true",
+                        help="Remove symlinks for blocked_artists from blocks.yaml (no Plex needed); "
+                             "combine with --show SHOW_ID or --all")
     parser.add_argument("--full", action="store_true", help="Sync all available Plex tracks (no limit)")
     parser.add_argument("--min", type=int, default=20, help="Minimum tracks per show (default 20)")
     parser.add_argument("--count", type=int, help="Add exactly N tracks regardless of current count")
+    parser.add_argument("--use-tags", action="store_true",
+                        help="Filter candidates by Last.fm artist tags (requires LASTFM_API_KEY)")
+    parser.add_argument("-v", "--verbose", action="store_true",
+                        help="Verbose output (tag lookups, filter details)")
     args = parser.parse_args()
 
     genres_config = load_genres_config()
+    blocks_config = load_blocks_config()
 
     if args.status:
         cmd_status(genres_config)
+        return 0
+
+    # --clean runs without a Plex connection; combine with --show or --all
+    if args.clean:
+        show_genres = genres_config.get("show_genres", {})
+        if args.show:
+            if args.show not in show_genres:
+                print(f"Error: unknown show '{args.show}'. Known: {', '.join(show_genres)}")
+                return 1
+            cmd_clean(args.show, blocks_config)
+        else:
+            # --all or no scope → clean all shows
+            for show_id in show_genres:
+                cmd_clean(show_id, blocks_config)
         return 0
 
     try:
@@ -300,17 +434,30 @@ def main() -> int:
         if args.show not in show_genres:
             print(f"Error: unknown show '{args.show}'. Known: {', '.join(show_genres)}")
             return 1
-        stock_show(client, args.show, show_genres[args.show], args.min, args.count, full=args.full)
+        stock_show(
+            client, args.show, show_genres[args.show], args.min, args.count,
+            full=args.full, blocks_config=blocks_config,
+            use_tags=args.use_tags, verbose=args.verbose,
+        )
         return 0
 
     if args.all:
         total = 0
         for show_id, genres in show_genres.items():
-            total += stock_show(client, show_id, genres, args.min, args.count, full=args.full)
+            total += stock_show(
+                client, show_id, genres, args.min, args.count,
+                full=args.full, blocks_config=blocks_config,
+                use_tags=args.use_tags, verbose=args.verbose,
+            )
         print(f"\nTotal new tracks added: {total}")
-        return 0
 
-    parser.print_help()
+    if args.use_tags:
+        from content_generator.artist_tags import flush_cache
+        flush_cache()
+
+    if not args.show and not args.all:
+        parser.print_help()
+
     return 0
 
 

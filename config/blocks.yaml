@@ -1,0 +1,58 @@
+# Per-block artist and tag filter rules.
+#
+# blocked_artists: case-insensitive match against Plex grandparentTitle.
+#   Include name variants — Plex may differ from what you expect.
+#
+# lastfm_tags.allowed: artist must have ≥1 of these Last.fm tags (--use-tags only).
+#   If omitted or empty, no allowed-tag requirement is enforced.
+# lastfm_tags.blocked: artist must have 0 of these tags (--use-tags only).
+#   blocked check runs before allowed — a blocked tag always excludes.
+#   Fail-open: if Last.fm returns no tags for an artist, the track is included.
+
+wind_down:
+  blocked_artists:
+    - Rusko
+    - Diplo
+    - Hudson Mohawke
+    - Snoop Dogg
+    - Ye
+    - Kanye West
+  lastfm_tags:
+    allowed:
+      - ambient
+      - post-rock
+      - atmospheric
+      - chillout
+      - instrumental
+      - drone
+      - space music
+      - electronica
+      - jazz
+      - easy listening
+      - trip-hop
+      - new age
+    blocked:
+      - dubstep
+      - edm
+      - dance
+      - party
+      - rap
+
+midday:
+  blocked_artists:
+    - Snoop Dogg
+  lastfm_tags:
+    blocked:
+      - rap
+      - hip-hop
+
+prime_time:
+  lastfm_tags:
+    allowed:
+      - rap
+      - hip-hop
+      - r&b
+      - soul
+      - trap
+      - west coast rap
+      - east coast rap
