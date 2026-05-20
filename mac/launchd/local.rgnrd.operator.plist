@@ -13,6 +13,16 @@
     <string>export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.local/bin"; cd "$HOME/code/reginerd-fm" &amp;&amp; mkdir -p "$HOME/Library/Logs/rgnrd" &amp;&amp; exec bash mac/operator_daemon.sh &gt;&gt; "$HOME/Library/Logs/rgnrd/operator_launchd.log" 2&gt;&gt; "$HOME/Library/Logs/rgnrd/operator_launchd.err.log"</string>
   </array>
 
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/reggiecooper/.local/bin</string>
+    <key>HOME</key>
+    <string>/Users/reggiecooper</string>
+    <key>RGNRD_AGENT_COMMAND</key>
+    <string>/opt/homebrew/bin/claude</string>
+  </dict>
+
   <key>RunAtLoad</key>
   <true/>
 

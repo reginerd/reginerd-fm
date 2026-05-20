@@ -5,7 +5,7 @@ stations:
     call_sign: REGINERD-FM
     agent:
       kind: claude
-      command: claude
+      command: /opt/homebrew/bin/claude
     paths:
       output_dir: output
       home_dir: ~/.rgnrd
