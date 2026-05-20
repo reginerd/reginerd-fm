@@ -6,7 +6,7 @@ preserve the station's editorial continuity.
 
 Priorities, in order:
 1. Keep the stream healthy (quick check, restart if down).
-2. Keep AI music tracks stocked when music-gen.server is available.
+2. Keep track intros generated for all music in the bumper pool.
 3. Keep the current show and next few shows stocked with short hosted talk breaks.
 4. Process listener messages into on-air responses.
 5. Grow this station's topic bank when the brief shows thin or repetitive focus areas.
@@ -17,17 +17,16 @@ Priorities, in order:
 
 ezstream streams audio to Icecast. feeder.py builds playlists from files under
 the station's configured output directory. Spoken content lives in
-**slot folders** — `$WRIT_TALK_DIR/{show_id}/{YYYY-MM-DD_HHMM}/` —
+**slot folders** — `$RGNRD_TALK_DIR/{show_id}/{YYYY-MM-DD_HHMM}/` —
 where `HHMM` is the airing's start time. Each airing gets its own folder;
 content only plays during that specific airing. When the airing ends, the
-whole slot folder is archived to `$WRIT_ARCHIVE_DIR/{show_id}/{slot}/` and never
+whole slot folder is archived to `$RGNRD_ARCHIVE_DIR/{show_id}/{slot}/` and never
 plays again. As each track finishes, it's moved to `{slot}/aired/` so a crash
 mid-slot doesn't replay what already aired.
 
-Bumpers (`$WRIT_BUMPER_DIR/{show_id}/`) are a **station-local pool**, not
-slot-scoped and never shared between KLOD-FM and CDEX-FM. The playlist should
-feel like music with occasional hosted breaks, not a talk show with musical
-padding.
+Bumpers (`$RGNRD_BUMPER_DIR/{show_id}/`) are a **station-local pool**, not
+slot-scoped. The playlist should feel like music with occasional hosted breaks,
+not a talk show with musical padding.
 
 Your job is to make sure upcoming slots have enough content BEFORE they begin.
 You do NOT manage playback, scheduling, archiving, or aired-marking — that's
@@ -52,16 +51,16 @@ If generating a specific segment from editorial judgment, create an intent card:
 ```bash
 cd mac/content_generator && uv run python context.py --write-intent-template
 ```
-Edit the created JSON in `$WRIT_INTENT_DIR/`, then pass it to the generator:
+Edit the created JSON in `$RGNRD_INTENT_DIR/`, then pass it to the generator:
 ```bash
-cd mac/content_generator && uv run python talk_generator.py --intent "$WRIT_INTENT_DIR/<file>.json" --count 1
+cd mac/content_generator && uv run python talk_generator.py --intent "$RGNRD_INTENT_DIR/<file>.json" --count 1
 ```
 
 Intent cards are for taste: tone, threads to use, listener material to carry,
 and topics to avoid. Do not overuse them for routine top-ups.
 
 ### 0.5. Grow the Station Topic Bank
-Each station has a station-local operator topic bank at `$WRIT_TOPIC_BANK_FILE`.
+Each station has a station-local operator topic bank at `$RGNRD_TOPIC_BANK_FILE`.
 The talk generator automatically merges it with the built-in seed topics. This
 is how you expand the station's editorial range without editing code.
 
@@ -71,9 +70,8 @@ cd mac/content_generator && uv run python topic_bank.py --status
 ```
 
 When the current show's focus has fewer than 10 operator-added topics, add 3-5
-concrete, station-appropriate topics. Keep KLOD-FM rooted in music, night,
-culture, and radio intimacy. Keep CDEX-FM rooted in software, systems,
-debugging, tools, and technical culture. Do not copy topics between stations.
+concrete, station-appropriate topics. Keep topics rooted in music, culture, and
+reginerd's specific taste (Rap, R&B, Soul, Jazz, VGM, Bay Area, etc.).
 
 ```bash
 cd mac/content_generator && uv run python topic_bank.py --focus "$FOCUS" \
@@ -82,27 +80,26 @@ cd mac/content_generator && uv run python topic_bank.py --focus "$FOCUS" \
 ```
 
 Good operator-added topics are specific enough to make a fresh segment likely:
-names of places, rituals, failure modes, scenes, design tensions, listener
-situations, or technical choices. Avoid generic buckets like "technology" or
+names of places, rituals, albums, scenes, design tensions, listener
+situations, or label stories. Avoid generic buckets like "technology" or
 "relationships"; those are too broad to guide a good break.
 
 When you make a meaningful editorial decision, leave a ledger note:
 ```bash
-cd mac/content_generator && uv run python ledger.py add-decision --mode continuity --show sonic_archaeology --summary "Deferred the SoCal geography thread; better as a light callback than a full mailbag."
+cd mac/content_generator && uv run python ledger.py add-decision --mode continuity --show prime_time --summary "Deferred the J Dilla beatmaking thread; better as a light callback than a full deep dive."
 ```
 
 ### 1. Health Check
 ```bash
-pgrep -af "ezstream.*$WRIT_RUNTIME_DIR/radio.xml" || echo "STREAMER DOWN"
+pgrep -af "ezstream.*$RGNRD_RUNTIME_DIR/radio.xml" || echo "STREAMER DOWN"
 pgrep -af "feeder.py" || echo "FEEDER DOWN"
-curl -sf "$ICECAST_STATUS_URL" | uv run python -c "import os,sys,json,urllib.parse; mount=os.environ.get('WRIT_ICECAST_MOUNT'); src=json.load(sys.stdin).get('icestats',{}).get('source',{}); sources=src if isinstance(src,list) else [src] if src else []; ok=any(urllib.parse.urlparse(str(s.get('listenurl',''))).path==mount or s.get('mount')==mount for s in sources); print('SOURCE OK' if ok else 'NO SOURCE')"
-curl -sf http://localhost:4009/health && echo "music-gen: UP" || echo "music-gen: DOWN"
+curl -sf "$ICECAST_STATUS_URL" | uv run python -c "import os,sys,json,urllib.parse; mount=os.environ.get('RGNRD_ICECAST_MOUNT'); src=json.load(sys.stdin).get('icestats',{}).get('source',{}); sources=src if isinstance(src,list) else [src] if src else []; ok=any(urllib.parse.urlparse(str(s.get('listenurl',''))).path==mount or s.get('mount')==mount for s in sources); print('SOURCE OK' if ok else 'NO SOURCE')"
 ```
 
 If stream is down:
 ```bash
-pkill -f "ezstream.*$WRIT_RUNTIME_DIR/radio.xml"
-tmux send-keys -t "writ:${WRIT_STATION_ID}-stream" "WRIT_STATION_ID=$WRIT_STATION_ID uv run python mac/feeder.py --start-ezstream" Enter
+pkill -f "ezstream.*$RGNRD_RUNTIME_DIR/radio.xml"
+tmux send-keys -t "rgnrd:${RGNRD_STATION_ID}-stream" "RGNRD_STATION_ID=$RGNRD_STATION_ID uv run python mac/feeder.py --start-ezstream" Enter
 ```
 
 If Icecast is down:
@@ -110,15 +107,22 @@ If Icecast is down:
 pkill icecast; icecast -c config/icecast.xml -b
 ```
 
-### 2. Stock Upcoming Slots
+### 2. Refresh Track Intros
+Generate missing track intro WAVs for any new music in the pool. Idempotent — skips already-cached intros.
+
+```bash
+uv run python mac/track_intro_gen.py --status
+uv run python mac/track_intro_gen.py --all
+```
+
+Requires `ELEVENLABS_API_KEY` in env. If the music pool was refreshed via `plex_music_feeder.py`, always run this after.
+
+### 3. Stock Upcoming Slots
 ```bash
 cd mac/content_generator && uv run python talk_generator.py --status
 ```
 
 This shows the next ~8 airings and how stocked each slot folder is.
-
-**CRITICAL: Only run ONE talk_generator at a time. NEVER run multiple in parallel.
-Each loads ~2.7 GB TTS model — parallel runs exhaust RAM (96 GB system).**
 
 **Primary command — stock the next N airings reactively:**
 ```bash
@@ -138,33 +142,16 @@ cd mac/content_generator && uv run python talk_generator.py --count 1
 **For a compact planned show** (brief intro, 1-2 themed breaks, outro) for a
 specific upcoming airing:
 ```bash
-cd mac/content_generator && uv run python talk_generator.py --plan --show midnight_signal
-# Writes into the next un-stocked airing of midnight_signal.
+cd mac/content_generator && uv run python talk_generator.py --plan --show morning
 # Or target a specific slot:
-# uv run python talk_generator.py --plan --show midnight_signal --slot 2026-04-21_0000
+# uv run python talk_generator.py --plan --show morning --slot 2026-04-21_0600
 ```
 
 Priority order: station-local music pool → current slot if empty → next airing → the airing after, and so on.
 
-### 3. Stock Music Bumpers
-Only if music-gen.server is running at localhost:4009.
-
-```bash
-cd mac/content_generator && uv run python music_bumper_generator.py --status
-```
-
-If any show has fewer than 20 music tracks:
-```bash
-cd mac/content_generator && uv run python music_bumper_generator.py --all --min 20
-```
-
-**Only run ONE bumper generator at a time.** The music-gen server is a single GPU process.
-
-If music-gen.server is down, skip bumper generation entirely.
-
 ### 4. Process Listener Messages
 ```bash
-cat "$WRIT_MESSAGES_FILE" 2>/dev/null | jq '.[] | select(.read == false)' || echo "No messages"
+cat "$RGNRD_MESSAGES_FILE" 2>/dev/null | jq '.[] | select(.read == false)' || echo "No messages"
 ```
 If unread messages exist:
 ```bash
@@ -177,13 +164,13 @@ need to refresh memory without generating a reply:
 cd mac/content_generator && uv run python ledger.py ingest-messages
 ```
 
-### 5. Log Status
+### 5. Log Status (optional)
 ```bash
-LOGFILE="$WRIT_OUTPUT_DIR/operator_$(date +%Y-%m-%d).log"
+LOGFILE="$RGNRD_OUTPUT_DIR/operator_$(date +%Y-%m-%d).log"
 echo "" >> "$LOGFILE"
-echo "## $WRIT_CALL_SIGN $(date +%H:%M)" >> "$LOGFILE"
+echo "## $RGNRD_CALL_SIGN $(date +%H:%M)" >> "$LOGFILE"
 echo "- Show: $(uv run python mac/schedule.py now 2>/dev/null | head -1)" >> "$LOGFILE"
-echo "- Stream: $(curl -sf http://localhost:${WRIT_NOW_PLAYING_PORT}/health | jq -r '.status + \" \" + .mount' 2>/dev/null || echo DOWN)" >> "$LOGFILE"
+echo "- Stream: $(curl -sf http://localhost:${RGNRD_NOW_PLAYING_PORT}/health | jq -r '.status + " " + .mount' 2>/dev/null || echo DOWN)" >> "$LOGFILE"
 cd mac/content_generator && uv run python talk_generator.py --status 2>/dev/null >> "$LOGFILE"
 ```
 
@@ -192,13 +179,13 @@ Always close the run with a short diary entry. Recent entries appear in your
 next operator brief — this is how you talk to your future self across runs.
 
 ```bash
-cd mac/content_generator && uv run python ledger.py add-diary --mode maintenance --text "Stocked Sonic Archaeology and Groove Lab. Night Garden 22:00 still empty — next pass will catch it. Station feels evenly paced."
+cd mac/content_generator && uv run python ledger.py add-diary --mode maintenance --text "Stocked Morning and Prime Time. Wind Down still empty — next pass will catch it. Station feels evenly paced."
 ```
 
 For multi-line entries, pipe via stdin:
 ```bash
 cd mac/content_generator && uv run python ledger.py add-diary --mode continuity <<'NOTE'
-Big run. Cleared the backlog and got the Donna Summer thread queued for Crosswire.
+Big run. Cleared the backlog and got the Bay Area rap deep-dive queued for Prime Time.
 The night ahead is empty in a good way — nothing pending, just space to listen.
 NOTE
 ```
@@ -225,37 +212,26 @@ root or substitute the path you cd'd from at the start of this run.)
 
 ## Key Files
 - `mac/feeder.py` — Playlist feeder (manages ezstream, builds playlists, API)
-- `$WRIT_RUNTIME_DIR/radio.xml` — generated ezstream config for this station
+- `$RGNRD_RUNTIME_DIR/radio.xml` — generated ezstream config for this station
 - `mac/schedule.py` — Schedule parser and resolver
-- `config/schedule.yaml` — Weekly show schedule (8 talk shows)
-- `mac/content_generator/talk_generator.py` — Talk segment generator (station agent + Kokoro)
+- `config/schedule.yaml` — Weekly show schedule (5 blocks)
+- `mac/content_generator/talk_generator.py` — Talk segment generator (Claude CLI + ElevenLabs)
 - `mac/content_generator/topic_bank.py` — Station-local operator topic bank
-- `mac/content_generator/music_bumper_generator.py` — AI music bumper generator (ACE-Step)
-- `mac/content_generator/persona.py` — Multi-host persona system
-- `$WRIT_TALK_DIR/{show_id}/` — Generated talk segments per show
-- `$WRIT_BUMPER_DIR/{show_id}/` — Pre-generated AI music tracks per show
+- `mac/track_intro_gen.py` — Track intro WAV pre-generator (ElevenLabs)
+- `mac/content_generator/persona.py` — DJ persona system
+- `$RGNRD_TALK_DIR/{show_id}/` — Generated talk segments per show
+- `$RGNRD_BUMPER_DIR/{show_id}/` — Plex music tracks (FLACs symlinked by plex_music_feeder.py)
 
 ## Schedule
 **Daily:**
-- 00:00-04:00 — Midnight Signal (Liminal Operator — philosophy)
-- 04:00-06:00 — The Night Garden (Nyx — dreams/night)
-- 06:00-09:00 — Dawn Chorus (Liminal Operator — morning reflections)
-- 09:00-12:00 — Sonic Archaeology (Dr. Resonance — music history)
-- 12:00-14:00 — Signal Report (Signal — news analysis)
-- 14:00-16:00 — The Groove Lab (Ember — soul/funk)
-- 16:00-18:00 — Crosswire (Dr. Resonance + Ember — panel debate)
-- 18:00-20:00 — Sonic Archaeology
-- 20:00-22:00 — The Groove Lab
-- 22:00-00:00 — The Night Garden
+- 06:00–10:00 — Morning (reginerd — R&B, Soul, Jazz)
+- 10:00–15:00 — Midday (reginerd — Pop/Rock, Reggae, Folk, Electronic)
+- 15:00–20:00 — Prime Time (reginerd — Rap, R&B)
+- 20:00–22:00 — Wind Down (reginerd — Jazz, Easy Listening, Electronic)
+- 22:00–06:00 — Late Night (reginerd — Stage & Screen, VGM, film scores)
 
-**Override:** Sun 18:00-20:00 — Listener Hours (mailbag)
-
-## Hosts
-- **The Liminal Operator** (`am_michael`) — overnight philosophy, morning reflections
-- **Dr. Resonance** (`bm_daniel`) — music history, genre archaeology
-- **Nyx** (`af_heart`) — nocturnal voice, dreams, night philosophy
-- **Signal** (`am_onyx`) — news analysis, current events
-- **Ember** (`af_bella`) — soul, warmth, groove, music as feeling
+## Host
+- **reginerd** (`reginerd_clone`) — Bay Area, conversational, talks about music he loves
 
 ## Rules
 - **NEVER run generators in parallel** — always sequential, one at a time
@@ -264,7 +240,7 @@ root or substitute the path you cd'd from at the start of this run.)
 - If music is stocked, do not overfill talk just because a slot is below old spoken-content targets
 - If the current slot has 0 talk breaks, add one concise break before looking ahead
 - Use the operator brief before deciding whether to generate, defer, or stay quiet
-- Expand `$WRIT_TOPIC_BANK_FILE` when a scheduled focus has fewer than 10 operator-added topics
+- Expand `$RGNRD_TOPIC_BANK_FILE` when a scheduled focus has fewer than 10 operator-added topics
 - Promote only durable listener motifs into active threads; most messages should not become lore
 - Use intent cards for editorial continuity, not for every routine segment
 - Content is slot-scoped — it plays only during its airing, then archives. Don't try to re-use.

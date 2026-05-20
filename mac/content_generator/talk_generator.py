@@ -1,9 +1,9 @@
 #!/usr/bin/env python3
 """
-WRIT-FM Talk Segment Generator
+RGNRD-FM Talk Segment Generator
 
 Generates hosted talk breaks for the music-forward radio format.
-Uses Claude CLI for scripts and Kokoro TTS for rendering.
+Uses Claude CLI for scripts and ElevenLabs TTS for rendering.
 
 Segment types:
   Hosted breaks (primary spoken content, 450-1000 words):
@@ -1137,12 +1137,12 @@ def render_multi_voice(script: str, output_path: Path, voices: dict[str, str]) -
 
     if not parts:
         # No markers found, render as single voice
-        host_voice = voices.get("host", "am_michael")
+        host_voice = voices.get("host", "reginerd_clone")
         return render_single_voice(script, output_path, host_voice)
 
     # Map speaker keys to voices
     voice_map = {}
-    host_voice = voices.get("host", "am_michael")
+    host_voice = voices.get("host", "reginerd_clone")
     guest_voice = voices.get("guest", "af_bella")
 
     for key in ("HOST", "HOST_A"):
@@ -1155,7 +1155,7 @@ def render_multi_voice(script: str, output_path: Path, voices: dict[str, str]) -
     # Use a temp directory for chunks so the streamer doesn't consume them
     import shutil
     import tempfile
-    tmp_dir = Path(tempfile.mkdtemp(prefix="writ_dialogue_"))
+    tmp_dir = Path(tempfile.mkdtemp(prefix="rgnrd_dialogue_"))
 
     # Render each part
     chunk_files = []
@@ -1209,7 +1209,7 @@ def generate_segment(
     log(f"=== Generating {segment_type} for {show_name} ===")
     log(f"  Topic: {topic[:80]}...")
     log(f"  Target: {min_words}-{max_words} words")
-    log(f"  Host: {host_id} (voice: {voices.get('host', 'am_michael')})")
+    log(f"  Host: {host_id} (voice: {voices.get('host', 'reginerd_clone')})")
 
     # Build prompt and generate script
     prompt = build_generation_prompt(
@@ -1264,7 +1264,7 @@ def generate_segment(
     if is_multi_voice:
         success = render_multi_voice(processed, output_path, voices)
     else:
-        host_voice = voices.get("host", "am_michael")
+        host_voice = voices.get("host", "reginerd_clone")
         success = render_single_voice(processed, output_path, host_voice)
 
     if not success or not output_path.exists():
@@ -1469,7 +1469,7 @@ def count_segments_by_slot() -> dict[str, dict[str, int]]:
 
 
 def main():
-    parser = argparse.ArgumentParser(description="WRIT-FM Talk Segment Generator")
+    parser = argparse.ArgumentParser(description="RGNRD-FM Talk Segment Generator")
     parser.add_argument("--show", help="Show ID to generate for (default: current show)")
     parser.add_argument("--slot", help="Slot key YYYY-MM-DD_HHMM (default: next un-stocked airing of --show, or current airing)")
     parser.add_argument("--type", dest="segment_type", help="Specific segment type")

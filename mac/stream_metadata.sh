@@ -16,9 +16,9 @@ set -u
 
 SCRIPT_DIR="$(cd "$(dirname "$0")" && pwd)"
 PROJECT_ROOT="$(cd "$SCRIPT_DIR/.." && pwd)"
-CALL_SIGN="${WRIT_CALL_SIGN:-WRIT-FM}"
-STATE_FILE="${WRIT_CURRENT_TRACK_FILE:-$PROJECT_ROOT/output/.current_track.txt}"
-NOW_PLAYING="${WRIT_NOW_PLAYING_FILE:-$PROJECT_ROOT/output/now_playing.json}"
+CALL_SIGN="${RGNRD_CALL_SIGN:-REGINERD-FM}"
+STATE_FILE="${RGNRD_CURRENT_TRACK_FILE:-$PROJECT_ROOT/output/runtime/.current_track.txt}"
+NOW_PLAYING="${RGNRD_NOW_PLAYING_FILE:-$PROJECT_ROOT/output/now_playing.json}"
 
 CURRENT=""
 [ -f "$STATE_FILE" ] && CURRENT=$(cat "$STATE_FILE" 2>/dev/null || true)
@@ -90,6 +90,9 @@ if [ -n "$CURRENT" ] && [ -f "$CURRENT" ]; then
                 DISPLAY=$(json_field "$META_FILE" display_name 2>/dev/null || true)
                 [ -n "$DISPLAY" ] && TITLE="$DISPLAY"
             fi
+            ;;
+        */track_intros/*)
+            TITLE="$CALL_SIGN"
             ;;
         *)
             TITLE=$(name_of "$CURRENT")

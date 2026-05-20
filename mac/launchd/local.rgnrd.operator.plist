@@ -10,7 +10,7 @@
   <array>
     <string>/bin/bash</string>
     <string>-lc</string>
-    <string>export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.local/bin"; cd "${WRIT_HOME:-$HOME/reginerd-fm}" &amp;&amp; mkdir -p "$HOME/Library/Logs/rgnrd" &amp;&amp; exec bash mac/operator_daemon.sh &gt;&gt; "$HOME/Library/Logs/rgnrd/operator_launchd.log" 2&gt;&gt; "$HOME/Library/Logs/rgnrd/operator_launchd.err.log"</string>
+    <string>export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.local/bin"; cd "$HOME/code/reginerd-fm" &amp;&amp; mkdir -p "$HOME/Library/Logs/rgnrd" &amp;&amp; exec bash mac/operator_daemon.sh &gt;&gt; "$HOME/Library/Logs/rgnrd/operator_launchd.log" 2&gt;&gt; "$HOME/Library/Logs/rgnrd/operator_launchd.err.log"</string>
   </array>
 
   <key>RunAtLoad</key>

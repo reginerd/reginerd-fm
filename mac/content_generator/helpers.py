@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Shared helpers for WRIT-FM content generators.
+Shared helpers for RGNRD-FM content generators.
 """
 
 from __future__ import annotations
@@ -27,8 +27,8 @@ DEFAULT_NEWS_FEEDS = (
     "https://feeds.bbci.co.uk/news/rss.xml",
     "https://feeds.npr.org/1001/rss.xml",
 )
-NEWS_CACHE_TTL_SECONDS = int(os.environ.get("WRIT_NEWS_CACHE_TTL", "600"))
-NEWS_TIMEOUT_SECONDS = int(os.environ.get("WRIT_NEWS_TIMEOUT", "6"))
+NEWS_CACHE_TTL_SECONDS = int(os.environ.get("RGNRD_NEWS_CACHE_TTL", "600"))
+NEWS_TIMEOUT_SECONDS = int(os.environ.get("RGNRD_NEWS_TIMEOUT", "6"))
 
 _NEWS_CACHE: dict[str, object] = {"timestamp": 0.0, "items": []}
 
@@ -174,8 +174,8 @@ def fetch_headlines(max_items: int | None = None) -> list[dict]:
     if cached_items and now - float(_NEWS_CACHE.get("timestamp", 0.0)) < NEWS_CACHE_TTL_SECONDS:
         return list(cached_items)
 
-    max_items = max_items or int(os.environ.get("WRIT_NEWS_MAX_ITEMS", "8"))
-    feed_env = os.environ.get("WRIT_NEWS_FEEDS")
+    max_items = max_items or int(os.environ.get("RGNRD_NEWS_MAX_ITEMS", "8"))
+    feed_env = os.environ.get("RGNRD_NEWS_FEEDS")
     feeds = [f.strip() for f in feed_env.split(",")] if feed_env else list(DEFAULT_NEWS_FEEDS)
     feeds = [f for f in feeds if f]
 
@@ -232,11 +232,6 @@ def format_headlines(headlines: list[dict], max_items: int | None = None) -> str
 # SHARED TTS RENDERING
 # =============================================================================
 
-_PROJECT_ROOT = Path(__file__).resolve().parents[2]
-_KOKORO_DIR = _PROJECT_ROOT / "mac" / "kokoro"
-_KOKORO_PYTHON = _KOKORO_DIR / ".venv" / "bin" / "python"
-_KOKORO_VOICE_RE = re.compile(r'^[ab][mf]_')
-
 _ELEVENLABS_MODEL = "eleven_turbo_v2_5"
 _ELEVENLABS_CHUNK_CHARS = 2000
 
@@ -249,7 +244,8 @@ def _resolve_elevenlabs_voice_id(voice_name: str) -> str | None:
             os.environ.get("ELEVENLABS_PLACEHOLDER_VOICE_ID", "").strip() or
             None
         )
-    if not _KOKORO_VOICE_RE.match(voice_name) and len(voice_name) > 10:
+    # Raw voice IDs (long strings) pass through directly
+    if len(voice_name) > 10:
         return voice_name
     return None
 
@@ -281,7 +277,7 @@ def render_elevenlabs(text: str, output_path: Path, voice_id: str, api_key: str)
         if current:
             chunks.append(current)
 
-    tmp_dir = Path(tempfile.mkdtemp(prefix="writ_el_"))
+    tmp_dir = Path(tempfile.mkdtemp(prefix="rgnrd_el_"))
     chunk_files: list[Path] = []
 
     try:
@@ -336,55 +332,6 @@ def get_audio_duration(filepath: Path) -> float | None:
     return None
 
 
-def render_kokoro(text: str, output_path: Path, voice: str = "am_michael") -> bool:
-    """Render text to speech using Kokoro TTS."""
-    if not _KOKORO_PYTHON.exists():
-        log("Kokoro venv not found")
-        return False
-
-    escaped_text = text.replace('\\', '\\\\').replace('"', '\\"').replace('\n', ' ')
-
-    tts_script = f'''
-import warnings
-warnings.filterwarnings("ignore")
-
-from kokoro import KPipeline
-import soundfile as sf
-import numpy as np
-
-pipe = KPipeline(lang_code="a", repo_id="hexgrad/Kokoro-82M")
-
-text = "{escaped_text}"
-voice = "{voice}"
-
-generator = pipe(text, voice=voice, speed=1.0)
-audio_segments = []
-for _, _, audio in generator:
-    audio_segments.append(audio)
-
-if len(audio_segments) == 1:
-    full_audio = audio_segments[0]
-else:
-    full_audio = np.concatenate(audio_segments)
-
-sf.write("{output_path}", full_audio, 24000)
-print("SUCCESS")
-'''
-
-    try:
-        result = subprocess.run(
-            [str(_KOKORO_PYTHON), "-c", tts_script],
-            capture_output=True,
-            text=True,
-            timeout=300,
-            cwd=str(_KOKORO_DIR),
-        )
-        return "SUCCESS" in result.stdout
-    except Exception as e:
-        log(f"Kokoro error: {e}")
-        return False
-
-
 def concatenate_audio(chunk_files: list[Path], output_path: Path, gap_seconds: float = 0) -> bool:
     """Concatenate WAV files, optionally with silence gaps between them."""
     if len(chunk_files) == 1:
@@ -429,77 +376,14 @@ def concatenate_audio(chunk_files: list[Path], output_path: Path, gap_seconds: f
 
 
 def render_single_voice(text: str, output_path: Path, voice: str) -> bool:
-    """Render a single-voice script to audio.
-
-    Routes to ElevenLabs for non-Kokoro voices (e.g. reginerd_clone) when
-    ELEVENLABS_API_KEY is set; falls back to Kokoro am_michael otherwise.
-    Kokoro voices (af_*/am_*/bf_*/bm_*) always go through Kokoro.
-    """
-    if not _KOKORO_VOICE_RE.match(voice):
-        api_key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
-        if api_key:
-            voice_id = _resolve_elevenlabs_voice_id(voice)
-            if voice_id:
-                log(f"  ElevenLabs: voice={voice_id[:8]}...")
-                return render_elevenlabs(text, output_path, voice_id, api_key)
-            log(f"  No ElevenLabs voice ID for '{voice}', falling back to Kokoro")
-        else:
-            log(f"  No ELEVENLABS_API_KEY, falling back to Kokoro for '{voice}'")
-        voice = "am_michael"
-
-    MAX_CHUNK_WORDS = 100
-    words = text.split()
-
-    if len(words) <= MAX_CHUNK_WORDS:
-        return render_kokoro(text, output_path, voice)
-
-    sentences = re.split(r'(?<=[.!?])\s+', text)
-
-    chunks: list[str] = []
-    current_chunk: list[str] = []
-    current_words = 0
-
-    for sentence in sentences:
-        sentence_words = len(sentence.split())
-        if current_words + sentence_words > MAX_CHUNK_WORDS and current_chunk:
-            chunks.append(' '.join(current_chunk))
-            current_chunk = [sentence]
-            current_words = sentence_words
-        else:
-            current_chunk.append(sentence)
-            current_words += sentence_words
-
-    if current_chunk:
-        chunks.append(' '.join(current_chunk))
-
-    log(f"  Rendering {len(chunks)} chunks with voice {voice}...")
-
-    # Use a temp directory for chunks so the streamer doesn't consume them
-    import tempfile
-    tmp_dir = Path(tempfile.mkdtemp(prefix="writ_chunks_"))
-
-    chunk_files: list[Path] = []
-    failed_chunks = 0
-    for i, chunk in enumerate(chunks):
-        chunk_path = tmp_dir / f"chunk{i:03d}.wav"
-        for attempt in range(2):
-            if render_kokoro(chunk, chunk_path, voice):
-                chunk_files.append(chunk_path)
-                break
-            time.sleep(2)
-        else:
-            failed_chunks += 1
-
-    if failed_chunks:
-        log(f"  {failed_chunks}/{len(chunks)} chunks failed to render")
-
-    if not chunk_files:
-        log("  No chunks rendered")
-        tmp_dir.rmdir()
+    """Render a single-voice script to audio via ElevenLabs."""
+    api_key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
+    if not api_key:
+        log("  No ELEVENLABS_API_KEY set — cannot render TTS")
         return False
-
-    result = concatenate_audio(chunk_files, output_path)
-    # Clean up temp directory
-    import shutil
-    shutil.rmtree(tmp_dir, ignore_errors=True)
-    return result
+    voice_id = _resolve_elevenlabs_voice_id(voice)
+    if not voice_id:
+        log(f"  No ElevenLabs voice ID for '{voice}'")
+        return False
+    log(f"  ElevenLabs: voice={voice_id[:8]}...")
+    return render_elevenlabs(text, output_path, voice_id, api_key)

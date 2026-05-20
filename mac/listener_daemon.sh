@@ -1,5 +1,5 @@
 #!/bin/bash
-# WRIT-FM Listener Response Daemon — turns listener messages into on-air segments
+# RGNRD-FM Listener Response Daemon — turns listener messages into on-air segments
 # Polls for unread messages every 30 seconds. When found, generates a short
 # spoken response and drops it into the talk segment queue.
 #
@@ -9,7 +9,7 @@
 RADIO_DIR="$(cd "$(dirname "$0")/.." && pwd)"
 cd "$RADIO_DIR"
 eval "$(uv run python mac/station_config.py --env)"
-MESSAGES_FILE="${WRIT_MESSAGES_FILE:-$HOME/.writ/messages.json}"
+MESSAGES_FILE="${RGNRD_MESSAGES_FILE:-$HOME/.rgnrd/messages.json}"
 POLL_INTERVAL=30  # seconds between checks
 
 # Allow Claude CLI to run inside tmux (may be blocked by parent Claude Code session)
@@ -17,7 +17,7 @@ unset CLAUDECODE
 
 ts() { date +%H:%M; }
 
-echo "[listener-daemon $(ts)] Starting ${WRIT_CALL_SIGN:-WRIT-FM}. Polling every ${POLL_INTERVAL}s"
+echo "[listener-daemon $(ts)] Starting ${RGNRD_CALL_SIGN:-REGINERD-FM}. Polling every ${POLL_INTERVAL}s"
 
 while true; do
     # Quick check: any unread messages?

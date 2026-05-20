@@ -1,15 +1,15 @@
 #!/usr/bin/env python3
 """
-WRIT-FM Listener Response Generator
+RGNRD-FM Listener Response Generator
 
 Watches for new listener messages and generates short, personalized on-air responses.
 Designed to run as a daemon for near-real-time message incorporation.
 
 Flow:
-  1. Read ~/.writ/messages.json for unread messages
+  1. Read ~/.rgnrd/messages.json for unread messages
   2. Batch 1-3 messages into a short response segment (~200-400 words)
   3. Generate script via Claude CLI
-  4. Render audio via Kokoro TTS
+  4. Render audio via ElevenLabs TTS
   5. Drop into output/talk_segments/{show_id}/ for the streamer
   6. Mark messages as read
 
@@ -213,12 +213,12 @@ def process_messages(max_batch: int = MAX_BATCH) -> int:
         slot = slot_key(schedule.airing_start())
     except Exception as e:
         log(f"Schedule error, using defaults: {e}")
-        show_id = "midnight_signal"
-        show_name = "Midnight Signal"
-        show_description = "Philosophy and late-night transmissions."
-        host_id = "liminal_operator"
-        topic_focus = "philosophy"
-        voice = "am_michael"
+        show_id = "late_night"
+        show_name = "Late Night"
+        show_description = "Stage & Screen — video game and film soundtracks."
+        host_id = "reginerd"
+        topic_focus = "vgm"
+        voice = "reginerd_clone"
         slot = datetime.now().strftime("%Y-%m-%d_%H00")
 
     log(f"Current show: {show_name} (host: {host_id}, voice: {voice})")
@@ -320,7 +320,7 @@ def process_messages(max_batch: int = MAX_BATCH) -> int:
 def main():
     import argparse
 
-    parser = argparse.ArgumentParser(description="WRIT-FM Listener Response Generator")
+    parser = argparse.ArgumentParser(description="RGNRD-FM Listener Response Generator")
     parser.add_argument("--status", action="store_true", help="Show unread message count")
     parser.add_argument("--max-batch", type=int, default=MAX_BATCH, help="Max messages per segment")
     args = parser.parse_args()

@@ -11,7 +11,7 @@ shows:
     host: "reginerd"
     topic_focus: "soul_music"
     genres: ["R&B", "Easy Listening", "Jazz", "Vocal"]
-    segment_types: ["track_intro", "track_outro", "station_id"]
+    segment_types: ["station_id", "show_intro", "show_outro", "music_essay"]
     voices:
       host: "reginerd_clone"
 
@@ -21,7 +21,7 @@ shows:
     host: "reginerd"
     topic_focus: "music_history"
     genres: ["Pop/Rock", "Reggae", "Folk", "Electronic", "Country"]
-    segment_types: ["track_intro", "track_outro", "station_id"]
+    segment_types: ["station_id", "music_essay"]
     voices:
       host: "reginerd_clone"
 
@@ -31,7 +31,7 @@ shows:
     host: "reginerd"
     topic_focus: "rap"
     genres: ["Rap", "R&B"]
-    segment_types: ["track_intro", "track_outro", "station_id", "deep_cut"]
+    segment_types: ["station_id", "deep_dive", "music_essay"]
     voices:
       host: "reginerd_clone"
 
@@ -41,7 +41,7 @@ shows:
     host: "reginerd"
     topic_focus: "night_philosophy"
     genres: ["Jazz", "Easy Listening", "Electronic"]
-    segment_types: ["track_intro", "track_outro"]
+    segment_types: ["station_id", "show_intro", "show_outro"]
     voices:
       host: "reginerd_clone"
 
@@ -51,7 +51,7 @@ shows:
     host: "reginerd"
     topic_focus: "vgm"
     genres: ["Stage & Screen"]
-    segment_types: ["track_intro", "track_outro", "game_context"]
+    segment_types: ["station_id", "deep_dive"]
     voices:
       host: "reginerd_clone"
 
