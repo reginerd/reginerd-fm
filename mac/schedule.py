@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WRIT-FM Weekly Scheduling
+RGNRD-FM Scheduling
 
 Loads `config/schedule.yaml` and resolves the currently-active show based on:
 - day of week (mon..sun)
@@ -423,11 +423,11 @@ def load_schedule(path: Path) -> StationSchedule:
 def _cli() -> int:
     import argparse
 
-    parser = argparse.ArgumentParser(description="WRIT-FM schedule tools")
+    parser = argparse.ArgumentParser(description="RGNRD-FM schedule tools")
     parser.add_argument(
         "--schedule",
         default=os.environ.get(
-            "WRIT_SCHEDULE_PATH",
+            "RGNRD_SCHEDULE_PATH",
             str(Path(__file__).resolve().parents[1] / "config" / "schedule.yaml"),
         ),
         help="Path to schedule.yaml",

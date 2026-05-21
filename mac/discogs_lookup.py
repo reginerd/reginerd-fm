@@ -11,7 +11,7 @@ from dataclasses import dataclass
 
 
 DISCOGS_TOKEN = os.environ.get("DISCOGS_TOKEN", "").strip()
-DISCOGS_USER_AGENT = os.environ.get("DISCOGS_USER_AGENT", "WRIT-FM/0.1")
+DISCOGS_USER_AGENT = os.environ.get("DISCOGS_USER_AGENT", "RGNRD-FM/0.1")
 HAS_CREDENTIALS = bool(DISCOGS_TOKEN)
 
 

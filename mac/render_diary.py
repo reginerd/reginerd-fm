@@ -88,7 +88,7 @@ def render(entries: list[dict]) -> str:
       <a href="index.html">{html.escape(STATION.call_sign)}</a>
       <a href="how-to.html">How-To Guide</a>
       <a href="diary.html" class="active">Diary</a>
-      <a href="https://github.com/keltokhy/writ-fm">GitHub</a>
+      <a href="https://github.com/reginerd/reginerd-fm">GitHub</a>
     </nav>
 
     <h1>Operator Diary</h1>

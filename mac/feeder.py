@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WRIT-FM Playlist Feeder for ezstream.
+RGNRD-FM Playlist Feeder for ezstream.
 
 Runs as a daemon alongside ezstream. Builds and updates the playlist file
 based on the current show schedule. Sends SIGHUP to ezstream to reload
@@ -21,13 +21,14 @@ from datetime import datetime
 from pathlib import Path
 
 PROJECT_ROOT = Path(__file__).resolve().parent.parent
+PLAYLISTS_DIR = PROJECT_ROOT / "output" / "playlists"
 sys.path.insert(0, str(Path(__file__).parent))
 from station_config import apply_station_env, load_station_config  # noqa: E402
 
 if "--station" in sys.argv:
     station_idx = sys.argv.index("--station")
     try:
-        os.environ["WRIT_STATION_ID"] = sys.argv[station_idx + 1]
+        os.environ["RGNRD_STATION_ID"] = sys.argv[station_idx + 1]
     except IndexError:
         raise SystemExit("--station requires a station id")
     del sys.argv[station_idx:station_idx + 2]
@@ -51,8 +52,8 @@ def _env_int(name: str, default: int) -> int:
 
 # Music-forward defaults: keep talk as occasional hosted breaks inside longer
 # music runs. Env vars make live tuning possible without another deploy.
-TALK_SEGMENTS_PER_PLAYLIST = _env_int("WRIT_TALK_SEGMENTS_PER_PLAYLIST", 3)
-MUSIC_ONLY_TRACK_LIMIT = _env_int("WRIT_MUSIC_ONLY_TRACK_LIMIT", 12)
+TALK_SEGMENTS_PER_PLAYLIST = _env_int("RGNRD_TALK_SEGMENTS_PER_PLAYLIST", 3)
+MUSIC_ONLY_TRACK_LIMIT = _env_int("RGNRD_MUSIC_ONLY_TRACK_LIMIT", 12)
 MUSIC_LEAD_IN_BUMPERS_RANGE = (2, 3)
 MUSIC_BUMPERS_AFTER_TALK_RANGE = (3, 4)
 
@@ -194,7 +195,9 @@ def get_talk_segments(show_id: str, slot: str) -> list[Path]:
     if not slot_dir.exists():
         return []
     segments = sorted(
-        (p for p in slot_dir.glob("*.wav") if _is_current_station_content(p)),
+        (p for p in slot_dir.iterdir()
+         if p.is_file() and p.suffix.lower() in {".mp3", ".wav", ".flac"}
+         and _is_current_station_content(p)),
         key=lambda p: p.name,
     )
 
@@ -264,7 +267,7 @@ def get_bumpers(show_id: str) -> list[Path]:
     ]
     if HISTORY_ENABLED and files:
         try:
-            repeat_hours = int(os.environ.get("WRIT_BUMPER_REPEAT_HOURS", "4"))
+            repeat_hours = int(os.environ.get("RGNRD_BUMPER_REPEAT_HOURS", "4"))
             history = get_history()
             recent = history.get_recent_filepaths(hours=repeat_hours)
             fresh = [f for f in files if str(f) not in recent]
@@ -402,6 +405,19 @@ def append_bumpers(entries: list[dict], bumpers: list[Path], start_idx: int, cou
     return bumper_idx
 
 
+def _archive_played_talk(filepath: str) -> None:
+    """Move a finished talk WAV to {slot_dir}/aired/ so it won't replay."""
+    try:
+        p = Path(filepath)
+        if not p.exists() or "talk_segments" not in str(p):
+            return
+        aired_dir = p.parent / "aired"
+        aired_dir.mkdir(exist_ok=True)
+        p.rename(aired_dir / p.name)
+    except Exception as e:
+        log(f"  archive_played_talk failed: {e}")
+
+
 def record_play(filepath: str, show_id: str):
     """Record a play to history. Called when stream_metadata advances .current_track.txt."""
     if not HISTORY_ENABLED:
@@ -431,43 +447,129 @@ def signal_ezstream_reload():
             pass
 
 
+def _load_show_playlist(show_id: str, slot: str) -> list[dict] | None:
+    """Load the pre-generated show card playlist for this block/date if available."""
+    try:
+        date_str = slot.split("_")[0]
+    except Exception:
+        return None
+    path = PLAYLISTS_DIR / f"{show_id}_{date_str}.json"
+    if not path.exists():
+        return None
+    try:
+        return json.loads(path.read_text()).get("entries", [])
+    except Exception:
+        return None
+
+
 def build_playlist(show_id: str, slot: str) -> list[dict]:
     """Build an ordered playlist for the current (show, slot).
 
-    Reads only files directly in {TALK_DIR}/{show_id}/{slot}/ — the aired/
-    subfolder is ignored, so restart mid-slot doesn't replay what already aired.
-    Bumpers remain a station-local pool under music_bumpers/{show_id}/.
+    If a show card playlist exists for today's date, follows it exactly
+    (music in show card order, history-filtered to continue mid-sequence).
+    Otherwise falls back to the original shuffled pool behavior.
     """
-    entries = []
     talks = get_talk_segments(show_id, slot)
-    bumpers = get_bumpers(show_id)
-    bumper_idx = 0
+
+    # Load setlist so track_intro WAVs queue their specific introduced song next.
+    # Setlist-matched tracks are also removed from the general pool so they
+    # can't play randomly before their intro.
+    setlist: dict[str, str] = {}
+    setlist_resolved: set[str] = set()
+    slot_dir = TALK_DIR / show_id / slot
+    setlist_path = slot_dir / "setlist.json"
+    if setlist_path.exists():
+        try:
+            for entry in json.loads(setlist_path.read_text()):
+                if entry.get("type") == "track_intro" and entry.get("track_file"):
+                    setlist[entry["wav"]] = entry["track_file"]
+                    try:
+                        setlist_resolved.add(str(Path(entry["track_file"]).resolve()))
+                    except Exception:
+                        pass
+        except Exception:
+            pass
 
     if TALK_SEGMENTS_PER_PLAYLIST:
         talks = talks[:TALK_SEGMENTS_PER_PLAYLIST]
     else:
         talks = []
 
+    # --- Follow show card order if playlist file exists ---
+    playlist_entries = _load_show_playlist(show_id, slot)
+    if playlist_entries:
+        music_recent: set[str] = set()
+        if HISTORY_ENABLED:
+            try:
+                repeat_hours = int(os.environ.get("RGNRD_BUMPER_REPEAT_HOURS", "4"))
+                recent = get_history().get_recent_filepaths(hours=repeat_hours)
+                music_recent = set(recent)
+            except Exception:
+                pass
+
+        entries: list[dict] = []
+        talk_queue = list(talks)
+        talks_added = 0
+
+        for pe in playlist_entries:
+            if pe["type"] == "music":
+                if not pe.get("path"):
+                    continue
+                p = Path(pe["path"])
+                if not (p.exists() or p.is_symlink()):
+                    continue
+                resolved = str(p.resolve())
+                if resolved in setlist_resolved:
+                    continue  # will be inserted after its track_intro
+                if str(p) in music_recent or resolved in music_recent:
+                    continue  # skip recently played, continue from next position
+                _add_bumper_entry(entries, p, show_id)
+
+            elif pe["type"] == "talk":
+                if talks_added >= TALK_SEGMENTS_PER_PLAYLIST:
+                    break
+                if not talk_queue:
+                    continue
+                talk = talk_queue.pop(0)
+                entries.append({"path": str(talk), "type": "talk", "name": clean_name(talk)})
+                matched = setlist.get(talk.name)
+                if matched and Path(matched).exists():
+                    _add_bumper_entry(entries, Path(matched), show_id)
+                talks_added += 1
+
+        if not entries:
+            entries.append({"path": str(SILENCE_FILE), "type": "silence", "name": "Silence"})
+        return entries
+
+    # --- Fallback: original shuffled pool behavior ---
+    entries = []
+    bumpers = get_bumpers(show_id)
+    bumper_idx = 0
+
+    if setlist_resolved:
+        bumpers = [b for b in bumpers if str(b.resolve()) not in setlist_resolved]
+
     if not talks and not bumpers:
-        # Nothing — use silence
         entries.append({"path": str(SILENCE_FILE), "type": "silence", "name": "Silence"})
         return entries
 
     if not talks:
-        # No talk, stay music-forward and keep silence only as the playlist tail.
         for b in bumpers[:MUSIC_ONLY_TRACK_LIMIT]:
             _add_bumper_entry(entries, b, show_id)
         entries.append({"path": str(SILENCE_FILE), "type": "silence", "name": "Silence"})
         return entries
 
-    # Music-forward flow: lead with music, then use talk as hosted breaks between
-    # larger music blocks.
     lead_in = random.randint(*MUSIC_LEAD_IN_BUMPERS_RANGE)
     bumper_idx = append_bumpers(entries, bumpers, bumper_idx, lead_in, show_id)
 
     for talk in talks:
         entries.append({"path": str(talk), "type": "talk", "name": clean_name(talk)})
-        n_bumpers = random.randint(*MUSIC_BUMPERS_AFTER_TALK_RANGE)
+        matched_bumper = setlist.get(talk.name)
+        if matched_bumper and Path(matched_bumper).exists():
+            _add_bumper_entry(entries, Path(matched_bumper), show_id)
+            n_bumpers = max(0, random.randint(*MUSIC_BUMPERS_AFTER_TALK_RANGE) - 1)
+        else:
+            n_bumpers = random.randint(*MUSIC_BUMPERS_AFTER_TALK_RANGE)
         bumper_idx = append_bumpers(entries, bumpers, bumper_idx, n_bumpers, show_id)
 
     return entries
@@ -638,6 +740,9 @@ def run():
                     and current_path_obj.is_absolute()
                     and current_path != last_recorded_track
                 ):
+                    # Archive the outgoing talk segment so it doesn't replay
+                    if last_recorded_track and "talk_segments" in last_recorded_track:
+                        _archive_played_talk(last_recorded_track)
                     record_play(current_path, show["show_id"])
                     last_recorded_track = current_path
             except Exception:

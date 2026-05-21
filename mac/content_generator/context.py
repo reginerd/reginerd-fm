@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-Operator brief and prompt context for WRIT-FM.
+Operator brief and prompt context for RGNRD-FM.
 
 This module centralizes the station's dynamic memory so generators do not each
 invent their own view of listener messages, recent topics, and operator intent.
@@ -250,7 +250,7 @@ def write_intent_template(path: Path | None = None) -> Path:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="WRIT-FM operator context")
+    parser = argparse.ArgumentParser(description="RGNRD-FM operator context")
     parser.add_argument("--operator-brief", action="store_true")
     parser.add_argument("--json", action="store_true")
     parser.add_argument("--write-intent-template", nargs="?", const="", metavar="PATH")

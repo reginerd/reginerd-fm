@@ -3,21 +3,21 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Run Your Own AI Radio Station &mdash; WRIT-FM</title>
+  <title>Run Your Own AI Radio Station &mdash; RGNRD-FM</title>
   <link rel="stylesheet" href="style.css">
 </head>
 <body>
   <div class="container">
 
     <nav>
-      <a href="index.html">WRIT-FM</a>
+      <a href="index.html">RGNRD-FM</a>
       <a href="how-to.html" class="active">How-To Guide</a>
       <a href="diary.html">Diary</a>
       <a href="https://github.com/keltokhy/writ-fm">GitHub</a>
     </nav>
 
     <h1>Run Your Own AI Radio Station</h1>
-    <p>A complete walkthrough for setting up a 24/7 AI-powered internet radio station using the WRIT-FM codebase.</p>
+    <p>A complete walkthrough for setting up a 24/7 AI-powered internet radio station using the RGNRD-FM codebase.</p>
 
     <!-- ───────────────────────── 1. Prerequisites ───────────────────────── -->
 
@@ -61,7 +61,7 @@ chmod +x writ run_operator.sh</code></pre>
 
     <h2><span class="step">3</span> Set Up TTS</h2>
 
-    <p>WRIT-FM uses <a href="https://github.com/hexgrad/kokoro">Kokoro TTS</a> &mdash;
+    <p>RGNRD-FM uses <a href="https://github.com/hexgrad/kokoro">Kokoro TTS</a> &mdash;
     fast, CPU-friendly, with 28 built-in voices (American &amp; British). Each show
     in <code>config/schedule.yaml</code> is assigned a voice ID; hosts have
     distinctive deliveries that survive long-form segments.</p>
@@ -110,13 +110,13 @@ uv venv &amp;&amp; uv pip install kokoro soundfile</code></pre>
 
     <h2><span class="step">5</span> Music Bumpers (Optional)</h2>
 
-    <p>WRIT-FM is talk-first &mdash; long-form talk segments dominate, with short
+    <p>RGNRD-FM is talk-first &mdash; long-form talk segments dominate, with short
     music bumpers (1&ndash;2 tracks) between them. Bumpers are AI-generated via
     <a href="https://github.com/kortexa-ai/music-gen.server">music-gen.server</a>
     (ACE-Step model). Each show has a <code>bumper_style</code> in
     <code>config/schedule.yaml</code> &mdash; ambient, jazz, downtempo, soul, indie.</p>
 
-    <p>To run the music-gen server alongside WRIT-FM:</p>
+    <p>To run the music-gen server alongside RGNRD-FM:</p>
 <pre><code># Clone music-gen.server next to writ-fm
 cd ..
 git clone https://github.com/kortexa-ai/music-gen.server
@@ -273,14 +273,14 @@ cloudflared tunnel run writ-radio</code></pre>
         <tr><td><code>ICECAST_USER</code>, <code>ICECAST_PASS</code></td><td>Source credentials</td><td>from config</td></tr>
         <tr><td><code>MUSIC_GEN_URL</code></td><td>music-gen.server URL</td><td><code>http://localhost:4009</code></td></tr>
         <tr><td><code>MUSIC_GEN_DIR</code></td><td>Path to music-gen.server</td><td>sibling directory</td></tr>
-        <tr><td><code>WRIT_SEGMENTS_DIR</code></td><td>Override talk_segments root</td><td><code>output/talk_segments</code></td></tr>
-        <tr><td><code>WRIT_OPERATOR_INTERVAL_SECONDS</code></td><td>Operator daemon loop interval</td><td><code>900</code></td></tr>
-        <tr><td><code>WRIT_OPERATOR_TIMEOUT_SECONDS</code></td><td>Hard timeout per operator pass</td><td><code>1800</code></td></tr>
+        <tr><td><code>RGNRD_SEGMENTS_DIR</code></td><td>Override talk_segments root</td><td><code>output/talk_segments</code></td></tr>
+        <tr><td><code>RGNRD_OPERATOR_INTERVAL_SECONDS</code></td><td>Operator daemon loop interval</td><td><code>900</code></td></tr>
+        <tr><td><code>RGNRD_OPERATOR_TIMEOUT_SECONDS</code></td><td>Hard timeout per operator pass</td><td><code>1800</code></td></tr>
       </tbody>
     </table>
 
     <footer>
-      <a href="index.html">WRIT-FM</a> &mdash; an experiment in autonomous broadcasting.
+      <a href="index.html">RGNRD-FM</a> &mdash; an experiment in autonomous broadcasting.
     </footer>
 
   </div>

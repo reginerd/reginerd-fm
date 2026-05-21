@@ -1,9 +1,8 @@
 #!/usr/bin/env python3
-"""Station instance configuration for the WRIT radio runtime.
+"""Station instance configuration for the RGNRD-FM runtime.
 
-The codebase defaults to the original WRIT-FM single-station layout, but this
-module lets the same runtime run multiple isolated stations at once by selecting
-`WRIT_STATION_ID`.
+Supports multiple isolated stations selected via `RGNRD_STATION_ID`. Defaults
+to the rgnrd-fm station defined in config/stations.yaml.
 """
 
 from __future__ import annotations
@@ -20,7 +19,7 @@ import yaml
 
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 CONFIG_PATH = PROJECT_ROOT / "config" / "stations.yaml"
-DEFAULT_STATION_ID = "writ-fm"
+DEFAULT_STATION_ID = "rgnrd-fm"
 
 
 def _expand_path(value: str | Path | None) -> Path | None:
@@ -147,33 +146,33 @@ class StationConfig:
 
     def env(self) -> dict[str, str]:
         return {
-            "WRIT_STATION_ID": self.id,
-            "WRIT_CALL_SIGN": self.call_sign,
-            "WRIT_AGENT_KIND": self.agent.kind,
-            "WRIT_AGENT_COMMAND": self.agent.command,
-            "WRIT_OUTPUT_DIR": str(self.output_dir),
-            "WRIT_RUNTIME_DIR": str(self.runtime_dir),
-            "WRIT_STATION_HOME": str(self.home_dir),
-            "WRIT_SCHEDULE_PATH": str(self.schedule_path),
-            "WRIT_TALK_DIR": str(self.talk_dir),
-            "WRIT_BUMPER_DIR": str(self.bumper_dir),
-            "WRIT_ARCHIVE_DIR": str(self.archive_dir),
-            "WRIT_SCRIPTS_DIR": str(self.scripts_dir),
-            "WRIT_SHOW_LOG_DIR": str(self.show_log_dir),
-            "WRIT_INTENT_DIR": str(self.intent_dir),
-            "WRIT_TOPIC_BANK_FILE": str(self.topic_bank_file),
-            "WRIT_PLAYLIST_FILE": str(self.playlist_file),
-            "WRIT_SILENCE_FILE": str(self.silence_file),
-            "WRIT_CURRENT_TRACK_FILE": str(self.current_track_file),
-            "WRIT_NOW_PLAYING_FILE": str(self.now_playing_file),
-            "WRIT_MESSAGES_FILE": str(self.messages_file),
-            "WRIT_LEDGER_PATH": str(self.ledger_path),
-            "WRIT_ACTIVE_THREADS_PATH": str(self.active_threads_path),
-            "WRIT_HISTORY_DB_PATH": str(self.history_db_path),
-            "WRIT_NOW_PLAYING_PORT": str(self.stream.api_port),
-            "WRIT_ICECAST_HOST": self.stream.icecast_host,
-            "WRIT_ICECAST_PORT": str(self.stream.icecast_port),
-            "WRIT_ICECAST_MOUNT": self.stream.mount,
+            "RGNRD_STATION_ID": self.id,
+            "RGNRD_CALL_SIGN": self.call_sign,
+            "RGNRD_AGENT_KIND": self.agent.kind,
+            "RGNRD_AGENT_COMMAND": self.agent.command,
+            "RGNRD_OUTPUT_DIR": str(self.output_dir),
+            "RGNRD_RUNTIME_DIR": str(self.runtime_dir),
+            "RGNRD_STATION_HOME": str(self.home_dir),
+            "RGNRD_SCHEDULE_PATH": str(self.schedule_path),
+            "RGNRD_TALK_DIR": str(self.talk_dir),
+            "RGNRD_BUMPER_DIR": str(self.bumper_dir),
+            "RGNRD_ARCHIVE_DIR": str(self.archive_dir),
+            "RGNRD_SCRIPTS_DIR": str(self.scripts_dir),
+            "RGNRD_SHOW_LOG_DIR": str(self.show_log_dir),
+            "RGNRD_INTENT_DIR": str(self.intent_dir),
+            "RGNRD_TOPIC_BANK_FILE": str(self.topic_bank_file),
+            "RGNRD_PLAYLIST_FILE": str(self.playlist_file),
+            "RGNRD_SILENCE_FILE": str(self.silence_file),
+            "RGNRD_CURRENT_TRACK_FILE": str(self.current_track_file),
+            "RGNRD_NOW_PLAYING_FILE": str(self.now_playing_file),
+            "RGNRD_MESSAGES_FILE": str(self.messages_file),
+            "RGNRD_LEDGER_PATH": str(self.ledger_path),
+            "RGNRD_ACTIVE_THREADS_PATH": str(self.active_threads_path),
+            "RGNRD_HISTORY_DB_PATH": str(self.history_db_path),
+            "RGNRD_NOW_PLAYING_PORT": str(self.stream.api_port),
+            "RGNRD_ICECAST_HOST": self.stream.icecast_host,
+            "RGNRD_ICECAST_PORT": str(self.stream.icecast_port),
+            "RGNRD_ICECAST_MOUNT": self.stream.mount,
             "ICECAST_STATUS_URL": self.stream.status_url,
         }
 
@@ -219,19 +218,19 @@ def _built_in_config() -> dict[str, Any]:
         "default_station": DEFAULT_STATION_ID,
         "stations": {
             DEFAULT_STATION_ID: {
-                "call_sign": "WRIT-FM",
+                "call_sign": "REGINERD-FM",
                 "agent": {"kind": "claude", "command": "claude"},
                 "paths": {
                     "output_dir": "output",
-                    "home_dir": "~/.writ",
+                    "home_dir": "~/.rgnrd",
                     "schedule_path": "config/schedule.yaml",
                 },
                 "stream": {
                     "mount": "/stream",
                     "api_port": 8001,
-                    "stream_name": "WRIT-FM",
-                    "stream_genre": "Talk Radio",
-                    "stream_description": "The frequency between frequencies",
+                    "stream_name": "REGINERD-FM",
+                    "stream_genre": "Hip-Hop / R&B / VGM",
+                    "stream_description": "reginerd's record collection, on the air 24/7",
                 },
             }
         },
@@ -257,7 +256,7 @@ def station_ids(path: Path = CONFIG_PATH) -> list[str]:
 
 def load_station_config(station_id: str | None = None, path: Path = CONFIG_PATH) -> StationConfig:
     data = load_config_file(path)
-    selected = station_id or os.environ.get("WRIT_STATION_ID") or data.get("default_station") or DEFAULT_STATION_ID
+    selected = station_id or os.environ.get("RGNRD_STATION_ID") or data.get("default_station") or DEFAULT_STATION_ID
     stations = data.get("stations") or {}
     if selected not in stations:
         valid = ", ".join(stations)
@@ -269,13 +268,13 @@ def load_station_config(station_id: str | None = None, path: Path = CONFIG_PATH)
     agent = raw.get("agent") or {}
 
     output_default = "output" if selected == DEFAULT_STATION_ID else f"output/stations/{selected}"
-    home_default = "~/.writ" if selected == DEFAULT_STATION_ID else f"~/.writ/stations/{selected}"
+    home_default = "~/.rgnrd" if selected == DEFAULT_STATION_ID else f"~/.rgnrd/stations/{selected}"
 
     source_password = ""
     source_env = stream.get("source_password_env")
     if source_env:
         source_password = os.environ.get(str(source_env), "")
-    source_password = source_password or str(stream.get("source_password", "writ_source_2024"))
+    source_password = source_password or str(stream.get("source_password", "rgnrd_source_2024"))
 
     public_paths = tuple(
         p for p in (_expand_path(value) for value in paths.get("public_now_playing_paths", []))
@@ -303,7 +302,7 @@ def load_station_config(station_id: str | None = None, path: Path = CONFIG_PATH)
             encoder=str(stream.get("encoder", "oggenc-q8")),
         ),
         output_dir=_expand_path(paths.get("output_dir", output_default)) or PROJECT_ROOT / output_default,
-        home_dir=_expand_path(paths.get("home_dir", home_default)) or Path.home() / ".writ",
+        home_dir=_expand_path(paths.get("home_dir", home_default)) or Path.home() / ".rgnrd",
         schedule_path=_expand_path(paths.get("schedule_path", "config/schedule.yaml")) or PROJECT_ROOT / "config" / "schedule.yaml",
         public_now_playing_paths=public_paths,
     )
@@ -324,8 +323,8 @@ def get_field(station: StationConfig, field: str) -> Any:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="Resolve WRIT station configuration")
-    parser.add_argument("--station", help="Station id (defaults to WRIT_STATION_ID/default_station)")
+    parser = argparse.ArgumentParser(description="Resolve RGNRD station configuration")
+    parser.add_argument("--station", help="Station id (defaults to RGNRD_STATION_ID/default_station)")
     parser.add_argument("--json", action="store_true", help="Print resolved config as JSON")
     parser.add_argument("--env", action="store_true", help="Print shell export lines for this station")
     parser.add_argument("--ids", action="store_true", help="Print configured station ids")

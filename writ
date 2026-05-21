@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ──────────────────────────────────────────────────────────────
-# writ — WRIT-FM Radio Station CLI
+# rgnrd — RGNRD-FM Radio Station CLI
 #
 # Usage:
 #   writ start [component]     Start core components or a specific one
@@ -30,24 +30,24 @@ MUSIC_GEN_DIR="${MUSIC_GEN_DIR:-}"
 [[ -z "$MUSIC_GEN_DIR" && -d "$PROJECT_ROOT/../music-gen.server" ]] && \
     MUSIC_GEN_DIR="$(cd "$PROJECT_ROOT/../music-gen.server" && pwd)"
 
-STATION_ID="${WRIT_STATION_ID:-}"
+STATION_ID="${RGNRD_STATION_ID:-}"
 if [[ "${1:-}" == "--station" || "${1:-}" == "-S" ]]; then
     STATION_ID="${2:-}"
     [[ -z "$STATION_ID" ]] && { echo "--station requires a station id" >&2; exit 2; }
     shift 2
 fi
 [[ -z "$STATION_ID" ]] && STATION_ID="$(cd "$PROJECT_ROOT" && uv run python mac/station_config.py)"
-export WRIT_STATION_ID="$STATION_ID"
+export RGNRD_STATION_ID="$STATION_ID"
 station_field() {
-    (cd "$PROJECT_ROOT" && WRIT_STATION_ID="$STATION_ID" uv run python mac/station_config.py --field "$1")
+    (cd "$PROJECT_ROOT" && RGNRD_STATION_ID="$STATION_ID" uv run python mac/station_config.py --field "$1")
 }
 STATION_CALL_SIGN="$(station_field call_sign)"
 STATION_API_PORT="$(station_field stream.api_port)"
 STATION_MOUNT="$(station_field stream.mount)"
 STATION_SUFFIX="${STATION_ID//[^a-zA-Z0-9]/-}"
-PUBLIC_API_STATION_ID="${WRIT_PUBLIC_API_STATION_ID:-writ-fm}"
+PUBLIC_API_STATION_ID="${RGNRD_PUBLIC_API_STATION_ID:-rgnrd-fm}"
 PUBLIC_API_PORT="$(
-    cd "$PROJECT_ROOT" && WRIT_STATION_ID="$PUBLIC_API_STATION_ID" uv run python mac/station_config.py --field stream.api_port
+    cd "$PROJECT_ROOT" && RGNRD_STATION_ID="$PUBLIC_API_STATION_ID" uv run python mac/station_config.py --field stream.api_port
 )"
 
 SESSION="writ"
@@ -191,16 +191,16 @@ get_start_cmd() {
             [[ -z "$icecast_bin" ]] && \
                 { err "icecast not found. Install icecast or set ICECAST_BIN."; return 1; }
             echo "'$icecast_bin' -c '$PROJECT_ROOT/config/icecast.xml'" ;;
-        stream)    echo "cd '$PROJECT_ROOT' && WRIT_STATION_ID='$STATION_ID' uv run python mac/feeder.py --station '$STATION_ID' --start-ezstream" ;;
+        stream)    echo "cd '$PROJECT_ROOT' && RGNRD_STATION_ID='$STATION_ID' uv run python mac/feeder.py --station '$STATION_ID' --start-ezstream" ;;
         tunnel)    echo "cloudflared tunnel run wvoid-radio" ;;
-        api)       echo "cd '$PROJECT_ROOT' && WRIT_STATION_ID='$PUBLIC_API_STATION_ID' uv run python mac/api_server.py" ;;
-        youtube)   echo "cd '$PROJECT_ROOT' && WRIT_STATION_ID='$STATION_ID' bash mac/youtube_relay.sh" ;;
+        api)       echo "cd '$PROJECT_ROOT' && RGNRD_STATION_ID='$PUBLIC_API_STATION_ID' uv run python mac/api_server.py" ;;
+        youtube)   echo "cd '$PROJECT_ROOT' && RGNRD_STATION_ID='$STATION_ID' bash mac/youtube_relay.sh" ;;
         music-gen)
             [[ -z "$MUSIC_GEN_DIR" || ! -d "$MUSIC_GEN_DIR" ]] && \
                 { err "music-gen.server not found. Set MUSIC_GEN_DIR."; return 1; }
             echo "cd '$MUSIC_GEN_DIR' && LM_BACKEND=mlx PRELOAD_MODELS=1 ./run.sh" ;;
-        operator)  echo "cd '$PROJECT_ROOT' && unset CLAUDECODE && WRIT_STATION_ID='$STATION_ID' bash mac/operator_daemon.sh" ;;
-        listener)  echo "cd '$PROJECT_ROOT' && unset CLAUDECODE && WRIT_STATION_ID='$STATION_ID' bash mac/listener_daemon.sh" ;;
+        operator)  echo "cd '$PROJECT_ROOT' && unset CLAUDECODE && RGNRD_STATION_ID='$STATION_ID' bash mac/operator_daemon.sh" ;;
+        listener)  echo "cd '$PROJECT_ROOT' && unset CLAUDECODE && RGNRD_STATION_ID='$STATION_ID' bash mac/listener_daemon.sh" ;;
     esac
 }
 
@@ -320,14 +320,6 @@ stop_one() {
 cmd_start() {
     local target="${1:-core}"
     case "$target" in
-        stations|dual|duo)
-            log "Starting KLOD-FM and CDEX-FM streams..."
-            start_one icecast
-            start_one api
-            start_one tunnel
-            WRIT_STATION_ID=klod-fm "$0" start stream
-            WRIT_STATION_ID=cdex-fm "$0" start stream
-            echo ""; ok "KLOD-FM and CDEX-FM stream sources requested" ;;
         core)
             log "Starting ${STATION_CALL_SIGN} core..."
             start_one icecast; start_one stream; start_one tunnel
@@ -396,7 +388,7 @@ cmd_status_all() {
     local ids
     ids="$(cd "$PROJECT_ROOT" && uv run python mac/station_config.py --ids)"
     for sid in $ids; do
-        WRIT_STATION_ID="$sid" "$0" status
+        RGNRD_STATION_ID="$sid" "$0" status
     done
 }
 
@@ -451,20 +443,20 @@ cmd_generate() {
 cmd_help() {
     cat <<'EOF'
 
-  writ — WRIT-FM Radio Station CLI
+  rgnrd — RGNRD-FM Radio Station CLI
 
-  writ start [component]      Start core or a specific component
-  writ stop [component]       Stop all or a specific component
-  writ restart [component]    Restart
-  writ status                 Health check all components
-  writ status all             Health check every configured station
-  writ logs <component> [-f]  Show logs (-f for live)
-  writ attach [component]     Attach to tmux window
-  writ generate <talk|music>  Generate content (foreground)
+  rgnrd start [component]      Start core or a specific component
+  rgnrd stop [component]       Stop all or a specific component
+  rgnrd restart [component]    Restart
+  rgnrd status                 Health check all components
+  rgnrd status all             Health check every configured station
+  rgnrd logs <component> [-f]  Show logs (-f for live)
+  rgnrd attach [component]     Attach to tmux window
+  rgnrd generate <talk|music>  Generate content (foreground)
 
-  Select station:  writ --station klod-fm start stream
+  Select station:  rgnrd --station rgnrd-fm start stream
   Components:      icecast  stream  tunnel  api  youtube  music-gen  operator  listener
-  Groups:          core  content  all  stations
+  Groups:          core  content  all
 
 EOF
 }

@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WRIT-FM station ledger.
+RGNRD-FM station ledger.
 
 Append-only editorial memory for events the operator may want to carry forward.
 This is intentionally small and file-based so Claude can inspect and curate it.
@@ -21,7 +21,7 @@ sys.path.insert(0, str(PROJECT_ROOT / "mac"))
 from station_config import load_station_config  # noqa: E402
 
 STATION = load_station_config()
-WRIT_HOME = STATION.home_dir
+STATION_HOME = STATION.home_dir
 LEDGER_PATH = STATION.ledger_path
 MESSAGES_FILE = STATION.messages_file
 ACTIVE_THREADS_PATH = STATION.active_threads_path
@@ -61,7 +61,7 @@ def append_event(event: dict[str, Any]) -> bool:
         raise ValueError("ledger event requires id")
     if event["id"] in existing_ids():
         return False
-    WRIT_HOME.mkdir(parents=True, exist_ok=True)
+    STATION_HOME.mkdir(parents=True, exist_ok=True)
     event.setdefault("recorded_at", utcish_now())
     with LEDGER_PATH.open("a") as f:
         f.write(json.dumps(event, ensure_ascii=False, sort_keys=True) + "\n")
@@ -135,7 +135,7 @@ def load_active_threads() -> list[dict[str, Any]]:
 
 
 def save_active_threads(threads: list[dict[str, Any]]) -> None:
-    WRIT_HOME.mkdir(parents=True, exist_ok=True)
+    STATION_HOME.mkdir(parents=True, exist_ok=True)
     ACTIVE_THREADS_PATH.write_text(json.dumps({"threads": threads}, indent=2, ensure_ascii=False))
 
 
@@ -194,7 +194,7 @@ def recent_diary_entries(limit: int = 6) -> list[dict[str, Any]]:
 
 
 def main() -> int:
-    parser = argparse.ArgumentParser(description="WRIT-FM station ledger")
+    parser = argparse.ArgumentParser(description="RGNRD-FM station ledger")
     sub = parser.add_subparsers(dest="cmd", required=True)
 
     sub.add_parser("ingest-messages")

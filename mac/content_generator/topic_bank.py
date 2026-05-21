@@ -27,7 +27,7 @@ STATION = load_station_config()
 def topic_bank_path(path: str | Path | None = None) -> Path:
     if path:
         return Path(path)
-    env_path = os.environ.get("WRIT_TOPIC_BANK_FILE")
+    env_path = os.environ.get("RGNRD_TOPIC_BANK_FILE")
     return Path(env_path) if env_path else STATION.topic_bank_file
 
 

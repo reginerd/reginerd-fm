@@ -1,0 +1,36 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN"
+  "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0">
+<dict>
+  <key>Label</key>
+  <string>local.rgnrd.feeder</string>
+
+  <key>ProgramArguments</key>
+  <array>
+    <string>/bin/bash</string>
+    <string>-lc</string>
+    <string>export PATH="/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:$HOME/.local/bin"; cd "$HOME/code/reginerd-fm" &amp;&amp; source .env &amp;&amp; mkdir -p "$HOME/Library/Logs/rgnrd" &amp;&amp; exec uv run python mac/feeder.py --station rgnrd-fm --start-ezstream</string>
+  </array>
+
+  <key>EnvironmentVariables</key>
+  <dict>
+    <key>PATH</key>
+    <string>/opt/homebrew/bin:/usr/local/bin:/usr/bin:/bin:/usr/sbin:/sbin:/Users/reggiecooper/.local/bin</string>
+    <key>HOME</key>
+    <string>/Users/reggiecooper</string>
+  </dict>
+
+  <key>RunAtLoad</key>
+  <true/>
+
+  <key>KeepAlive</key>
+  <true/>
+
+  <key>StandardOutPath</key>
+  <string>/Users/reggiecooper/Library/Logs/rgnrd/feeder.log</string>
+
+  <key>StandardErrorPath</key>
+  <string>/Users/reggiecooper/Library/Logs/rgnrd/feeder.log</string>
+</dict>
+</plist>

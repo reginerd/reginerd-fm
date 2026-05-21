@@ -1,2 +1,2 @@
-# WRIT-FM Content Generator
+# RGNRD-FM Content Generator
 # Mac-side tools for generating DJ segments

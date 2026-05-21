@@ -9,7 +9,14 @@
 #   blocked check runs before allowed — a blocked tag always excludes.
 #   Fail-open: if Last.fm returns no tags for an artist, the track is included.
 
+morning:
+  segments: [show_intro, track_intro, music_essay, track_intro, show_outro]
+
+late_night:
+  segments: [show_intro, track_intro, show_outro]
+
 wind_down:
+  segments: [show_intro, track_intro, track_intro, show_outro]
   blocked_artists:
     - Rusko
     - Diplo
@@ -39,6 +46,7 @@ wind_down:
       - rap
 
 midday:
+  segments: [show_intro, track_intro, track_intro, show_outro]
   blocked_artists:
     - Snoop Dogg
   lastfm_tags:
@@ -47,6 +55,7 @@ midday:
       - hip-hop
 
 prime_time:
+  segments: [show_intro, track_intro, deep_dive, track_intro, music_essay, track_intro, show_outro]
   lastfm_tags:
     allowed:
       - rap

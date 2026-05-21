@@ -1,5 +1,5 @@
 #!/bin/bash
-# WRIT-FM Operator - Launch the configured station agent for maintenance
+# RGNRD-FM Operator - Launch the configured station agent for maintenance
 # Run manually, via cron, or from mac/operator_daemon.sh.
 
 set -euo pipefail
@@ -15,10 +15,10 @@ cd "$PROJECT_ROOT"
 
 eval "$(uv run python mac/station_config.py --env)"
 
-LOG_DIR="${WRIT_OUTPUT_DIR:-output}"
+LOG_DIR="${RGNRD_OUTPUT_DIR:-output}"
 SESSION_LOG="$LOG_DIR/operator_session_$(date +%Y-%m-%d).log"
-HEARTBEAT_SECONDS="${WRIT_OPERATOR_HEARTBEAT_SECONDS:-30}"
-CLAUDE_TIMEOUT_SECONDS="${WRIT_OPERATOR_TIMEOUT_SECONDS:-1800}"
+HEARTBEAT_SECONDS="${RGNRD_OPERATOR_HEARTBEAT_SECONDS:-30}"
+CLAUDE_TIMEOUT_SECONDS="${RGNRD_OPERATOR_TIMEOUT_SECONDS:-1800}"
 
 mkdir -p "$LOG_DIR"
 
@@ -47,8 +47,8 @@ acquire_lock
 
 # Read the operator prompt and inject station-specific context.
 OPERATOR_BRIEF="$(uv run python mac/content_generator/context.py --operator-brief 2>/dev/null || true)"
-PROMPT="You are operating ${WRIT_CALL_SIGN:-WRIT-FM} (${WRIT_STATION_ID:-writ-fm}).
-Configured station agent: ${WRIT_AGENT_KIND:-claude}.
+PROMPT="You are operating ${RGNRD_CALL_SIGN:-REGINERD-FM} (${RGNRD_STATION_ID:-rgnrd-fm}).
+Configured station agent: ${RGNRD_AGENT_KIND:-claude}.
 Keep all generated files, notes, and decisions inside this station's configured paths.
 
 ${OPERATOR_BRIEF}
@@ -57,18 +57,18 @@ $(cat mac/operator_prompt.md)"
 
 # Launch the configured agent and append the full session transcript.
 echo | tee -a "$SESSION_LOG"
-echo "## ${WRIT_CALL_SIGN:-WRIT-FM} operator session $(date '+%Y-%m-%d %H:%M:%S %Z')" | tee -a "$SESSION_LOG"
+echo "## ${RGNRD_CALL_SIGN:-REGINERD-FM} operator session $(date '+%Y-%m-%d %H:%M:%S %Z')" | tee -a "$SESSION_LOG"
 
 TIMEOUT_BIN="$(command -v timeout || command -v gtimeout || true)"
-case "${WRIT_AGENT_KIND:-claude}" in
+case "${RGNRD_AGENT_KIND:-claude}" in
     claude)
-        AGENT_CMD=("${WRIT_AGENT_COMMAND:-claude}" -p "$PROMPT" --allowedTools "Bash,Read,Write,Edit,Glob,Grep")
+        AGENT_CMD=("${RGNRD_AGENT_COMMAND:-claude}" -p "$PROMPT" --allowedTools "Bash,Read,Write,Edit,Glob,Grep")
         ;;
     codex)
-        AGENT_CMD=("${WRIT_AGENT_COMMAND:-codex}" exec --cd "$PROJECT_ROOT" --sandbox danger-full-access --color never "$PROMPT")
+        AGENT_CMD=("${RGNRD_AGENT_COMMAND:-codex}" exec --cd "$PROJECT_ROOT" --sandbox danger-full-access --color never "$PROMPT")
         ;;
     *)
-        echo "[operator] unsupported station agent: ${WRIT_AGENT_KIND}" | tee -a "$SESSION_LOG" >&2
+        echo "[operator] unsupported station agent: ${RGNRD_AGENT_KIND}" | tee -a "$SESSION_LOG" >&2
         exit 2
         ;;
 esac
@@ -81,7 +81,7 @@ fi
     2> >(tee -a "$SESSION_LOG" >&2) &
 AGENT_PID=$!
 
-echo "[operator] station=${WRIT_STATION_ID:-writ-fm} agent=${WRIT_AGENT_KIND:-claude} pid=$AGENT_PID" | tee -a "$SESSION_LOG"
+echo "[operator] station=${RGNRD_STATION_ID:-rgnrd-fm} agent=${RGNRD_AGENT_KIND:-claude} pid=$AGENT_PID" | tee -a "$SESSION_LOG"
 
 heartbeat() {
     local pid="$1"

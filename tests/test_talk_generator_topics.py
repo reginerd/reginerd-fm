@@ -80,7 +80,7 @@ class TalkTopicTests(unittest.TestCase):
             }))
 
             with (
-                patch.dict(os.environ, {"WRIT_TOPIC_BANK_FILE": str(bank_path)}),
+                patch.dict(os.environ, {"RGNRD_TOPIC_BANK_FILE": str(bank_path)}),
                 patch.object(random, "choice", side_effect=lambda items: items[0]),
             ):
                 topic = talk_generator.select_topic(

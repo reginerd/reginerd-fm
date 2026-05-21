@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WRIT-FM Now Playing API
+RGNRD-FM Now Playing API
 
 HTTP server that exposes current track info, schedule, history, and more.
 Runs as a daemon thread inside the streamer process.
@@ -57,7 +57,7 @@ MESSAGE_COOLDOWN = 300  # 5 minutes between messages per IP
 last_message_times: dict[str, float] = {}
 _messages_lock = threading.Lock()
 
-PORT = int(os.environ.get("WRIT_NOW_PLAYING_PORT", str(STATION.stream.api_port)))
+PORT = int(os.environ.get("RGNRD_NOW_PLAYING_PORT", str(STATION.stream.api_port)))
 ICECAST_STATUS_URL = os.environ.get(
     "ICECAST_STATUS_URL",
     STATION.stream.status_url,
@@ -691,7 +691,7 @@ def serve_api_forever(
     """Run the API as a standalone process.
 
     This keeps public station-prefixed routes such as
-    /klod-fm/now-playing alive even when the legacy WRIT-FM stream is stopped.
+    /rgnrd-fm/now-playing alive even when the stream is stopped.
     """
     _set_api_state(
         track_info or {},

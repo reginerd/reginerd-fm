@@ -27,6 +27,12 @@ output/.streamer_state.json
 output/.ezstream.pid
 output/operator.lock/
 output/*.txt
+output/playlists/
+output/manifests/
+output/show_cards/
+output/track_intros/
+output/tts_cache/
+output/.talk_generator.lock
 
 # Dev files
 command.txt

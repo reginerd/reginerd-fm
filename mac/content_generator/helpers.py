@@ -251,7 +251,7 @@ def _resolve_elevenlabs_voice_id(voice_name: str) -> str | None:
 
 
 def render_elevenlabs(text: str, output_path: Path, voice_id: str, api_key: str) -> bool:
-    """Render text to WAV using ElevenLabs TTS, chunking if needed."""
+    """Render text to MP3 using ElevenLabs TTS, chunking if needed."""
     import shutil
     import tempfile
     try:
@@ -283,7 +283,6 @@ def render_elevenlabs(text: str, output_path: Path, voice_id: str, api_key: str)
     try:
         for i, chunk in enumerate(chunks):
             mp3_path = tmp_dir / f"chunk{i:03d}.mp3"
-            wav_path = tmp_dir / f"chunk{i:03d}.wav"
             try:
                 audio_gen = client.text_to_speech.convert(
                     voice_id=voice_id,
@@ -292,16 +291,10 @@ def render_elevenlabs(text: str, output_path: Path, voice_id: str, api_key: str)
                     output_format="mp3_44100_128",
                 )
                 mp3_path.write_bytes(b"".join(audio_gen))
+                chunk_files.append(mp3_path)
             except Exception as e:
                 log(f"ElevenLabs API error on chunk {i}: {e}")
                 continue
-
-            result = subprocess.run(
-                ["ffmpeg", "-y", "-i", str(mp3_path), "-ar", "24000", "-ac", "1", str(wav_path)],
-                capture_output=True, timeout=60,
-            )
-            if result.returncode == 0 and wav_path.exists():
-                chunk_files.append(wav_path)
 
         if not chunk_files:
             log("ElevenLabs: no chunks rendered")
@@ -333,24 +326,33 @@ def get_audio_duration(filepath: Path) -> float | None:
 
 
 def concatenate_audio(chunk_files: list[Path], output_path: Path, gap_seconds: float = 0) -> bool:
-    """Concatenate WAV files, optionally with silence gaps between them."""
+    """Concatenate audio files. Uses stream copy for MP3; re-encodes for WAV."""
     if len(chunk_files) == 1:
         shutil.move(str(chunk_files[0]), str(output_path))
         return True
 
     list_file = output_path.with_suffix('.concat.txt')
+    is_mp3 = output_path.suffix.lower() == ".mp3"
 
     try:
         with open(list_file, 'w') as f:
             for cf in chunk_files:
                 f.write(f"file '{cf}'\n")
 
-        cmd = [
-            "ffmpeg", "-y", "-f", "concat", "-safe", "0",
-            "-i", str(list_file),
-            "-ar", "24000", "-ac", "1",
-            str(output_path)
-        ]
+        if is_mp3:
+            cmd = [
+                "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                "-i", str(list_file),
+                "-c", "copy",
+                str(output_path)
+            ]
+        else:
+            cmd = [
+                "ffmpeg", "-y", "-f", "concat", "-safe", "0",
+                "-i", str(list_file),
+                "-ar", "24000", "-ac", "1",
+                str(output_path)
+            ]
 
         result = subprocess.run(cmd, capture_output=True, timeout=120)
 

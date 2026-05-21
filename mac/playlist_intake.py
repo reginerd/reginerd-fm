@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-ezstream playlist intake program for WRIT-FM.
+ezstream playlist intake program for RGNRD-FM.
 
 Reads output/.playlist.m3u (managed by feeder.py) and returns one filename
 per invocation, advancing through the list. Tracks position by reading

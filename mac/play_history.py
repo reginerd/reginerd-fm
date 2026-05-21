@@ -1,6 +1,6 @@
 #!/usr/bin/env python3
 """
-WRIT-FM Play History Tracker
+RGNRD-FM Play History Tracker
 
 Tracks all played tracks to prevent repeats and enable analytics.
 Uses SQLite for persistent storage.

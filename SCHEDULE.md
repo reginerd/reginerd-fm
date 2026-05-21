@@ -1,36 +1,24 @@
-# Weekly Program Schedule (WRIT-FM)
+# RGNRD-FM Program Schedule
 
-All times are local, 24-hour. The base schedule runs every day; weekly
-overrides replace the base when day and time match. Canonical source:
-`config/schedule.yaml`.
+All times are local, 24-hour. One DJ: reginerd. Music-forward — short talk breaks between tracks.
+Canonical source: `config/schedule.yaml`.
 
 ## Daily Base
 
-| Time | Show | Host | Focus |
-|---|---|---|---|
-| 00:00–04:00 | Midnight Signal     | The Liminal Operator       | Philosophy, memory, late-night transmissions |
-| 04:00–06:00 | The Night Garden    | Nyx                         | Dreams, darkness, ambient |
-| 06:00–09:00 | Dawn Chorus         | The Liminal Operator       | Morning reflections |
-| 09:00–12:00 | Sonic Archaeology   | Dr. Resonance               | Deep cuts, music history |
-| 12:00–14:00 | Signal Report       | Signal                      | Current events decoded |
-| 14:00–16:00 | The Groove Lab      | Ember                       | Soul, funk, warmth |
-| 16:00–18:00 | Crosswire           | Dr. Resonance + Ember       | Two voices, panel debate |
-| 18:00–20:00 | Sonic Archaeology   | Dr. Resonance               | Deep cuts, music history |
-| 20:00–22:00 | The Groove Lab      | Ember                       | Soul, funk, warmth |
-| 22:00–00:00 | The Night Garden    | Nyx                         | Dreams, darkness, ambient |
+| Time | Block | Genres |
+|---|---|---|
+| 06:00–10:00 | Morning | R&B, Easy Listening, Jazz, Vocal |
+| 10:00–15:00 | Midday | Pop/Rock, Reggae, Folk, Electronic, Country |
+| 15:00–20:00 | Prime Time | Rap, R&B |
+| 20:00–22:00 | Wind Down | Jazz, Easy Listening, Electronic |
+| 22:00–06:00 | Late Night | Stage & Screen (VGM + film scores) |
 
-## Weekly Overrides
+## Day-of-Week Notes
 
-| Day | Time | Show | Notes |
-|---|---|---|---|
-| Sunday | 18:00–20:00 | Listener Hours | Replaces Sonic Archaeology — mailbag, listener messages on air |
+Friday Prime Time extends to 22:00 (planned — REG-123). Saturday Sabbath Morning block (Gospel, 06:00–10:00) is planned (REG-127).
 
-## Hosts
+## Host
 
 | Host | Voice | Tone |
 |---|---|---|
-| The Liminal Operator | `am_michael` | Philosophical, late-night, contemplative |
-| Dr. Resonance       | `bm_daniel`  | Music historian, professorial, warm |
-| Nyx                  | `af_heart`   | Nocturnal, dream-logic, soft |
-| Signal               | `am_onyx`    | News analyst, dry, observant |
-| Ember                | `af_bella`   | Soul host, warm, groove-led |
+| reginerd | `reginerd_clone` (ElevenLabs) | Conversational, Bay Area, direct — talks about music he loves |
