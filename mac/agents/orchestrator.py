@@ -23,7 +23,6 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 sys.path.insert(0, str(PROJECT_ROOT / "mac"))
 
 SCHEDULE_PATH = PROJECT_ROOT / "config" / "schedule.yaml"
-GENRES_CONFIG = PROJECT_ROOT / "config" / "genres.yaml"
 BLOCKS_CONFIG = PROJECT_ROOT / "config" / "blocks.yaml"
 MANIFEST_DIR = PROJECT_ROOT / "output" / "manifests"
 SCRIPTS_DIR = Path.home() / "life-os" / "life-os" / "Projects" / "reginerd.fm" / "Scripts"
@@ -170,27 +169,27 @@ def run_nightly(target_date: date | None = None, dry_run: bool = False) -> list[
 
     print(f"[orchestrator] Nightly batch for {target_date.isoformat()}{' (dry-run)' if dry_run else ''}")
 
-    # REG-140: Refresh Plex music queues before curating
+    # REG-140: Refresh flat library index before curating
     if not dry_run:
         try:
             import subprocess
-            print("[orchestrator] Refreshing Plex music queues (plex_music_feeder --all --full)...")
+            print("[orchestrator] Refreshing music library index (music_indexer.py)...")
             subprocess.run(
-                ["uv", "run", "python", "mac/plex_music_feeder.py", "--all", "--full"],
+                ["uv", "run", "python", "mac/music_indexer.py"],
                 cwd=PROJECT_ROOT, capture_output=True, timeout=600
             )
-            print("[orchestrator] plex_music_feeder refresh done")
+            print("[orchestrator] music_indexer refresh done")
         except Exception as e:
-            print(f"[orchestrator] plex_music_feeder refresh failed (non-fatal): {e}", file=sys.stderr)
+            print(f"[orchestrator] music_indexer refresh failed (non-fatal): {e}", file=sys.stderr)
 
     context = _load_context(target_date)
     airings = _get_tomorrow_airings(target_date)
 
     if not airings:
-        # Fallback: run all blocks from genres.yaml without schedule slot info
-        print("[orchestrator] No schedule found — falling back to genres.yaml blocks")
-        genres_cfg = _load_yaml(GENRES_CONFIG)
-        blocks = list(genres_cfg.get("show_genres", {}).keys())
+        # Fallback: run all blocks from blocks.yaml without schedule slot info
+        print("[orchestrator] No schedule found — falling back to blocks.yaml blocks")
+        blocks_cfg = _load_yaml(BLOCKS_CONFIG)
+        blocks = list(blocks_cfg.keys())
         airings = [
             (block, datetime.combine(target_date, datetime.min.time()))
             for block in blocks

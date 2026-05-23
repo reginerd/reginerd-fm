@@ -20,6 +20,9 @@ PROJECT_ROOT = Path(__file__).resolve().parents[2]
 _API_BASE = "https://ws.audioscrobbler.com/2.0/"
 _CACHE_TTL = int(os.environ.get("LASTFM_CACHE_TTL", "3600"))
 _CACHE_PATH = PROJECT_ROOT / "output" / "runtime" / "lastfm_context.json"
+# Shared life-os cache written by the 1am lastfm-sync Hermes job (6h TTL).
+_SHARED_CACHE = Path("~/life-os/data/lastfm_context.json").expanduser()
+_SHARED_CACHE_TTL = 6 * 3600
 
 
 def _api_call(method: str, api_key: str, username: str, **kwargs) -> dict | None:
@@ -142,17 +145,34 @@ def sync(api_key: str | None = None, username: str | None = None) -> dict | None
 
 
 def load(force_sync: bool = False) -> dict | None:
-    """Load context from cache, syncing if stale or missing."""
-    if not force_sync and _CACHE_PATH.exists():
-        try:
-            ctx = json.loads(_CACHE_PATH.read_text())
-            synced_at = ctx.get("synced_at", "")
-            if synced_at:
-                age = time.time() - datetime.fromisoformat(synced_at).timestamp()
-                if age < _CACHE_TTL:
-                    return ctx
-        except Exception:
-            pass
+    """Load context from cache, syncing if stale or missing.
+
+    Primary source: ~/life-os/data/lastfm_context.json (written by life-os 1am Hermes job).
+    Fallback: local output/runtime/lastfm_context.json, then live API sync.
+    """
+    if not force_sync:
+        # Try shared life-os cache first
+        if _SHARED_CACHE.exists():
+            try:
+                ctx = json.loads(_SHARED_CACHE.read_text())
+                synced_at = ctx.get("synced_at", "")
+                if synced_at:
+                    age = time.time() - datetime.fromisoformat(synced_at).timestamp()
+                    if age < _SHARED_CACHE_TTL:
+                        return ctx
+            except Exception:
+                pass
+        # Fall back to local cache
+        if _CACHE_PATH.exists():
+            try:
+                ctx = json.loads(_CACHE_PATH.read_text())
+                synced_at = ctx.get("synced_at", "")
+                if synced_at:
+                    age = time.time() - datetime.fromisoformat(synced_at).timestamp()
+                    if age < _CACHE_TTL:
+                        return ctx
+            except Exception:
+                pass
     return sync()
 
 

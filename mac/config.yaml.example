@@ -12,13 +12,17 @@ plex:
 # NAS mount path (where Plex music files are accessible on this machine)
 nas_mount: /Volumes/music        # Adjust to your actual mount path
 
-# LLM settings (Qwen14B via Hermes on Mac Studio)
+# LLM settings
 llm:
-  base_url: http://localhost:11434/v1  # Hermes/Ollama endpoint
-  model: qwen2.5:14b
-  timeout: 60
+  base_url: http://localhost:11434/v1  # Ollama endpoint
+  model: qwen3-nothink
+  claude_model: claude-sonnet-4-6      # used only for claude_segments
+  claude_segments:
+    - music_essay
+    - deep_dive
+  timeout: 120
   temperature: 0.8
-  max_tokens: 300
+  max_tokens: 400
 
 # TTS — ElevenLabs (pre-generated nightly, not real-time)
 tts:

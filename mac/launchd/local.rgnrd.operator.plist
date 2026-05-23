@@ -21,6 +21,8 @@
     <string>/Users/reggiecooper</string>
     <key>RGNRD_AGENT_COMMAND</key>
     <string>/opt/homebrew/bin/claude</string>
+    <key>RGNRD_OPERATOR_INTERVAL_SECONDS</key>
+    <string>10800</string>
   </dict>
 
   <key>RunAtLoad</key>

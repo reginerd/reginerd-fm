@@ -62,7 +62,7 @@ echo "## ${RGNRD_CALL_SIGN:-REGINERD-FM} operator session $(date '+%Y-%m-%d %H:%
 TIMEOUT_BIN="$(command -v timeout || command -v gtimeout || true)"
 case "${RGNRD_AGENT_KIND:-claude}" in
     claude)
-        AGENT_CMD=("${RGNRD_AGENT_COMMAND:-claude}" -p "$PROMPT" --allowedTools "Bash,Read,Write,Edit,Glob,Grep")
+        AGENT_CMD=("${RGNRD_AGENT_COMMAND:-claude}" --model "${RGNRD_CLAUDE_MODEL:-claude-sonnet-4-6}" -p "$PROMPT" --allowedTools "Bash,Read,Write,Edit,Glob,Grep")
         ;;
     codex)
         AGENT_CMD=("${RGNRD_AGENT_COMMAND:-codex}" exec --cd "$PROJECT_ROOT" --sandbox danger-full-access --color never "$PROMPT")

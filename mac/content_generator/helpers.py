@@ -378,14 +378,32 @@ def concatenate_audio(chunk_files: list[Path], output_path: Path, gap_seconds: f
 
 
 def render_single_voice(text: str, output_path: Path, voice: str) -> bool:
-    """Render a single-voice script to audio via ElevenLabs."""
-    api_key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
-    if not api_key:
-        log("  No ELEVENLABS_API_KEY set — cannot render TTS")
-        return False
-    voice_id = _resolve_elevenlabs_voice_id(voice)
-    if not voice_id:
-        log(f"  No ElevenLabs voice ID for '{voice}'")
-        return False
-    log(f"  ElevenLabs: voice={voice_id[:8]}...")
-    return render_elevenlabs(text, output_path, voice_id, api_key)
+    """Render a single-voice script to audio.
+
+    Backend is controlled by RGNRD_TTS_BACKEND (default: kokoro).
+    Set to 'elevenlabs' to use ElevenLabs instead.
+    Kokoro voice is controlled by RGNRD_KOKORO_VOICE (default: am_michael).
+    """
+    backend = os.environ.get("RGNRD_TTS_BACKEND", "kokoro").lower()
+
+    if backend == "elevenlabs":
+        api_key = os.environ.get("ELEVENLABS_API_KEY", "").strip()
+        if not api_key:
+            log("  No ELEVENLABS_API_KEY set — cannot render TTS")
+            return False
+        voice_id = _resolve_elevenlabs_voice_id(voice)
+        if not voice_id:
+            log(f"  No ElevenLabs voice ID for '{voice}'")
+            return False
+        log(f"  ElevenLabs: voice={voice_id[:8]}...")
+        return render_elevenlabs(text, output_path, voice_id, api_key)
+
+    # Kokoro (default)
+    import importlib.util
+    kokoro_path = PROJECT_ROOT / "mac" / "kokoro" / "tts.py"
+    spec = importlib.util.spec_from_file_location("kokoro_local_tts", kokoro_path)
+    mod = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(mod)
+    kokoro_voice = os.environ.get("RGNRD_KOKORO_VOICE", mod.DEFAULT_VOICE)
+    log(f"  Kokoro TTS: voice={kokoro_voice}")
+    return mod.render_speech(text, output_path, voice=kokoro_voice)

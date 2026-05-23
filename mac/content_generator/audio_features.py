@@ -150,6 +150,35 @@ def scan_block(block: str, use_librosa: bool = False, verbose: bool = False) -> 
     return analyzed
 
 
+# ---------------------------------------------------------------------------
+# Public reader API (used by researcher.py and curator.py)
+# ---------------------------------------------------------------------------
+
+def load_cache() -> dict:
+    """Return the full features cache dict, {} if missing or unreadable."""
+    return _load_cache()
+
+
+def get_artist_features(artist: str) -> list[dict]:
+    """Return all cache entries where entry['artist'] matches (case-insensitive)."""
+    cache = _load_cache()
+    lower = artist.lower()
+    return [v for v in cache.values() if isinstance(v, dict) and v.get("artist", "").lower() == lower]
+
+
+def get_album_features(artist: str, album: str) -> list[dict]:
+    """Return cache entries matching artist AND album (case-insensitive)."""
+    cache = _load_cache()
+    al = artist.lower()
+    alb = album.lower()
+    return [
+        v for v in cache.values()
+        if isinstance(v, dict)
+        and v.get("artist", "").lower() == al
+        and v.get("album", "").lower() == alb
+    ]
+
+
 def scan_all_blocks(use_librosa: bool = False, verbose: bool = True) -> None:
     """Scan all blocks under output/music_bumpers/."""
     bumpers_root = PROJECT_ROOT / "output" / "music_bumpers"

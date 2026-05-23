@@ -28,6 +28,8 @@ sys.path.insert(0, str(PROJECT_ROOT / "mac"))
 
 SCRIPTS_DIR = Path.home() / "life-os" / "life-os" / "Projects" / "reginerd.fm" / "Scripts"
 WIKI_DIR = Path.home() / "life-os" / "life-os" / "Notes" / "Wiki" / "Artists"
+
+from content_generator.blog_context import find_writeup as _find_writeup
 TALK_SEGMENTS_DIR = PROJECT_ROOT / "output" / "talk_segments"
 BUMPERS_DIR = PROJECT_ROOT / "output" / "music_bumpers"
 BLOCKS_CONFIG = PROJECT_ROOT / "config" / "blocks.yaml"
@@ -75,14 +77,27 @@ def _load_wiki(artist: str) -> str:
     return content.strip()[:2000]
 
 
-def _llm_generate(system_prompt: str, user_prompt: str, mac_cfg: dict) -> str:
+def _llm_generate(system_prompt: str, user_prompt: str, mac_cfg: dict, segment_type: str = "") -> str:
     llm = mac_cfg.get("llm", {})
-    base_url = llm.get("base_url", "http://localhost:11434/v1")
-    model = llm.get("model", "qwen2.5:14b")
     temperature = llm.get("temperature", 0.8)
     max_tokens = llm.get("max_tokens", 300)
+    claude_segments = llm.get("claude_segments", [])
 
-    # Use native Ollama /api/chat to support think:false for qwen3 models
+    if segment_type in claude_segments:
+        import anthropic
+        model = llm.get("claude_model", "claude-sonnet-4-6")
+        client = anthropic.Anthropic()
+        response = client.messages.create(
+            model=model,
+            max_tokens=max_tokens,
+            temperature=temperature,
+            system=system_prompt,
+            messages=[{"role": "user", "content": user_prompt}],
+        )
+        return response.content[0].text.strip()
+
+    base_url = llm.get("base_url", "http://localhost:11434/v1")
+    model = llm.get("model", "qwen3:14b")
     ollama_base = base_url.rstrip("/").removesuffix("/v1")
     payload = json.dumps({
         "model": model,
@@ -92,12 +107,8 @@ def _llm_generate(system_prompt: str, user_prompt: str, mac_cfg: dict) -> str:
         ],
         "stream": False,
         "think": False,
-        "options": {
-            "temperature": temperature,
-            "num_predict": max_tokens,
-        },
+        "options": {"temperature": temperature, "num_predict": max_tokens},
     }).encode()
-
     req = urllib.request.Request(
         f"{ollama_base}/api/chat",
         data=payload,
@@ -163,6 +174,25 @@ CRITICAL RULES:
 - Never reference being AI or generated."""
 
 
+def _vibe_description(bpm: float | None, energy: float | None, brightness: float | None) -> str:
+    parts = []
+    if bpm:
+        if bpm < 85:       parts.append(f"slow tempo ({bpm:.0f} BPM)")
+        elif bpm < 110:    parts.append(f"mid-tempo ({bpm:.0f} BPM)")
+        elif bpm < 135:    parts.append(f"upbeat ({bpm:.0f} BPM)")
+        else:              parts.append(f"uptempo ({bpm:.0f} BPM)")
+    if energy:
+        if energy < 0.05:   parts.append("sparse production")
+        elif energy < 0.10: parts.append("laid-back production")
+        elif energy < 0.18: parts.append("moderate energy")
+        else:               parts.append("dense/heavy production")
+    if brightness:
+        if brightness < 3000:   parts.append("dark/warm tone")
+        elif brightness < 6000: parts.append("balanced tone")
+        else:                   parts.append("bright/airy tone")
+    return ", ".join(parts)
+
+
 def _build_track_user_prompt(
     track: dict,
     segment_type: str,
@@ -188,6 +218,9 @@ def _build_track_user_prompt(
         parts.append(f"Album: {album}" + (f" ({year})" if year else ""))
     if tags:
         parts.append(f"Tags: {', '.join(tags[:5])}")
+    vibe = _vibe_description(track.get("bpm"), track.get("energy"), track.get("brightness"))
+    if vibe:
+        parts.append(f"Vibe: {vibe}")
     if personal:
         parts.append(f"Personal connection: {'; '.join(personal)}")
     if wiki_context:
@@ -235,11 +268,20 @@ def _build_nontrack_user_prompt(
         parts.append("Write the show_outro — close the block.")
     elif segment_type == "deep_dive" and preceding_tracks:
         prev = preceding_tracks[-1]
-        wiki = _load_wiki(prev.get("artist", ""))
+        artist = prev.get("artist", "")
+        wiki = _load_wiki(artist)
         if wiki:
-            parts.append(f"\nWiki context for {prev.get('artist', '')}:\n{wiki}")
-        parts.append(f"Write a deep_dive going further on {prev.get('artist', '')} or that track.")
+            parts.append(f"\nWiki context for {artist}:\n{wiki}")
+        writeup = _find_writeup(artist)
+        if writeup:
+            parts.append(f"\nReggie's write-up on {artist}:\n{writeup}")
+        parts.append(f"Write a deep_dive going further on {artist} or that track.")
     elif segment_type == "music_essay":
+        if preceding_tracks:
+            prev_artist = preceding_tracks[-1].get("artist", "")
+            writeup = _find_writeup(prev_artist)
+            if writeup:
+                parts.append(f"\nReggie's write-up on {prev_artist}:\n{writeup}")
         parts.append("Write a music_essay — a brief reflection on a theme from today's playlist.")
     elif segment_type == "news_analysis":
         parts.append("Skip news for now — write a brief thought on the station or today's music instead.")
@@ -374,7 +416,7 @@ def generate_scripts(
 
         # Generate
         try:
-            body = _llm_generate(system_prompt, user_prompt, mac_cfg)
+            body = _llm_generate(system_prompt, user_prompt, mac_cfg, segment_type=segment_type)
         except Exception as e:
             print(f"[scriptwriter] LLM failed for {segment_type}: {e}", file=sys.stderr)
             try:

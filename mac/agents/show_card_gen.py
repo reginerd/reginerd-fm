@@ -17,9 +17,11 @@ from __future__ import annotations
 
 import argparse
 import json
+import math
 import random
 import re
 import sys
+from collections import Counter
 from datetime import date, timedelta
 from pathlib import Path
 
@@ -74,12 +76,6 @@ BLOCK_SLUG = {
     "wind_down": "wind-down",
     "late_night": "late-night",
 }
-
-# Last.fm tag → energy tier
-_HIGH_ENERGY_TAGS = {"upbeat", "energetic", "party", "dance", "hype", "trap", "drill",
-                     "hip-hop", "dancehall", "funk", "soul", "r&b", "neo soul"}
-_LOW_ENERGY_TAGS = {"chillout", "chill", "mellow", "ambient", "slow", "late night",
-                    "acoustic", "ballad", "quiet", "soft"}
 
 
 def _parse_frontmatter(text: str) -> tuple[dict, str]:
@@ -139,101 +135,129 @@ def _load_scripts_for_block(target_date: date, block: str) -> list[dict]:
     return sorted(result, key=lambda x: x["seq"])
 
 
-def _load_full_tracklist(block: str) -> list[tuple[str, str, Path]]:
-    """Return sorted (artist, title, path) tuples from the music bumpers pool."""
+def _load_full_tracklist(block: str, manifest: dict | None = None) -> list[dict]:
+    """Return track dicts from the manifest pool or bumpers directory.
+
+    If manifest has a 'pool' key, use it (preferred).
+    Otherwise fall back to the music_bumpers glob (backward compat).
+
+    Returns list of dicts with: artist, title, path (optional),
+    bpm, energy, brightness, score, lastfm_tags.
+    """
+    # Prefer manifest pool
+    if manifest is not None and manifest.get("pool"):
+        result = []
+        for t in manifest["pool"]:
+            nas_path = t.get("nas_path") or t.get("plex_file", "")
+            path = Path(nas_path) if nas_path else None
+            result.append({
+                "artist": t.get("artist", ""),
+                "title": t.get("title", ""),
+                "path": path,
+                "bpm": t.get("bpm"),
+                "energy": t.get("energy"),
+                "brightness": t.get("brightness"),
+                "score": t.get("score", 0.0),
+                "lastfm_tags": t.get("lastfm_tags", []),
+                "plex_rating": t.get("plex_rating", 0.0),
+            })
+        return sorted(result, key=lambda x: (x["artist"].lower(), x["title"].lower()))
+
+    # Fallback: read from bumpers directory
     block_dir = BUMPERS_DIR / block
     if not block_dir.exists():
         return []
-    tracks = []
+    result = []
     for f in block_dir.iterdir():
         if (f.is_file() or f.is_symlink()) and f.suffix.lower() in AUDIO_SUFFIXES:
             artist, title = _parse_bumper_name(f.stem)
-            tracks.append((artist, title, f))
-    return sorted(tracks, key=lambda x: (x[0].lower(), x[1].lower()))
+            result.append({
+                "artist": artist,
+                "title": title,
+                "path": f,
+                "bpm": None,
+                "energy": None,
+                "brightness": None,
+                "score": 0.0,
+                "lastfm_tags": [],
+                "plex_rating": 0.0,
+            })
+    return sorted(result, key=lambda x: (x["artist"].lower(), x["title"].lower()))
 
 
-def _energy_tier(tags: list[str]) -> int:
-    """Return 0=low, 1=medium, 2=high based on Last.fm tags."""
-    tag_set = {t.lower() for t in tags}
-    if tag_set & _HIGH_ENERGY_TAGS:
-        return 2
-    if tag_set & _LOW_ENERGY_TAGS:
-        return 0
-    return 1
+def _sinusoidal_arc_sequence(tracks: list[dict], period: int = 16) -> list[dict]:
+    """Sequence tracks with DJ-style ebb-and-flow energy arc."""
+    if not tracks:
+        return []
+
+    energies = [t.get("energy") or 0 for t in tracks]
+    e_min = min(energies) if energies else 0
+    e_max = max(energies) if energies else 1
+    e_span = (e_max - e_min) or 1e-9
+
+    def norm_energy(t: dict) -> float:
+        e = t.get("energy")
+        if e is None:
+            return 0.5
+        return (e - e_min) / e_span
+
+    remaining = list(tracks)
+    result = []
+
+    for i in range(len(tracks)):
+        # Sinusoidal target oscillates between ~0.1 and ~0.9
+        target = 0.5 + 0.4 * math.sin(2 * math.pi * i / period)
+        best = min(remaining, key=lambda t: abs(norm_energy(t) - target))
+        result.append(best)
+        remaining.remove(best)
+
+    return result
 
 
-def _load_sequenced_tracklist(block: str, manifest: dict) -> list[dict]:
-    """Return tracks from bumper pool, sequenced by genre + energy arc."""
-    full = _load_full_tracklist(block)
+def _load_sequenced_tracklist(block: str, manifest: dict | None = None) -> list[dict]:
+    """Return tracks from pool, sequenced by sinusoidal energy arc."""
+    full = _load_full_tracklist(block, manifest)
     if not full:
         return []
 
-    # Build a lookup: (artist, title) → manifest metadata (lastfm_tags, plex_rating)
+    # Build a lookup: (artist, title) → manifest metadata for enrichment
     manifest_meta: dict[tuple[str, str], dict] = {}
-    for t in manifest.get("tracks", []):
+    for t in (manifest or {}).get("tracks", []):
         key = (t.get("artist", "").lower(), t.get("title", "").lower())
         manifest_meta[key] = t
 
+    # Enrich with manifest metadata where available (fills in tags/rating for fallback tracks)
     enriched = []
-    for artist, title, path in full:
-        key = (artist.lower(), title.lower())
+    for t in full:
+        key = (t["artist"].lower(), t["title"].lower())
         meta = manifest_meta.get(key, {})
-        tags = meta.get("lastfm_tags", [])
-        rating = meta.get("plex_rating", 5)
+        tags = t.get("lastfm_tags") or meta.get("lastfm_tags", [])
+        rating = t.get("plex_rating") or meta.get("plex_rating", 5) or 5
+        score = t.get("score") or 0.0
+        # Priority artist boost: appear earlier in sequence via score bump
+        is_priority = t["artist"].lower() in PRIORITY_ARTISTS
+        effective_score = score + (1.5 if is_priority else 0.0)
         enriched.append({
-            "artist": artist,
-            "title": title,
-            "path": path,
+            "artist": t["artist"],
+            "title": t["title"],
+            "path": t.get("path"),
             "tags": tags,
-            "rating": rating or 5,
-            "energy": _energy_tier(tags),
+            "rating": rating,
+            "energy": t.get("energy"),
+            "score": effective_score,
+            "bpm": t.get("bpm"),
+            "brightness": t.get("brightness"),
         })
 
-    # Interleave across energy tiers for the arc: low → med → high → med → low
-    # Priority artists get a +1.5 rating boost so they appear earlier and more often,
-    # but are still distributed throughout the show rather than front-loaded.
-    def _sort_key(t: dict) -> tuple:
-        is_priority = t["artist"].lower() in PRIORITY_ARTISTS
-        boost = 1.5 if is_priority else 0.0
-        return (-(t["rating"] + boost),)
+    # Sort by score descending so high-priority tracks get first pick in arc
+    enriched.sort(key=lambda t: -t["score"])
 
-    low = sorted([t for t in enriched if t["energy"] == 0], key=_sort_key)
-    med = sorted([t for t in enriched if t["energy"] == 1], key=_sort_key)
-    high = sorted([t for t in enriched if t["energy"] == 2], key=_sort_key)
-
-    # Build a single ordered pool: alternate low/med/high by proportion
-    distinct_tiers = [t for t in (low, med, high) if t]
-    if len(distinct_tiers) == 1:
-        # All tracks in same tier — just use rating order directly
-        pool = distinct_tiers[0][:]
-    else:
-        # Interleave: one from each non-empty tier in arc order, cycling
-        arc = []
-        iters = {0: iter(low), 1: iter(med), 2: iter(high)}
-        nexts = {}
-        for k, it in iters.items():
-            try:
-                nexts[k] = next(it)
-            except StopIteration:
-                nexts[k] = None
-        # Arc pattern: low, med, high, med, low — mapped to tier keys
-        pattern = [0, 1, 2, 1, 0]
-        p_idx = 0
-        while any(v is not None for v in nexts.values()):
-            k = pattern[p_idx % len(pattern)]
-            p_idx += 1
-            if nexts.get(k) is None:
-                continue
-            arc.append(nexts[k])
-            try:
-                nexts[k] = next(iters[k])
-            except StopIteration:
-                nexts[k] = None
-        pool = arc
+    # Apply sinusoidal energy arc
+    sequenced_arc = _sinusoidal_arc_sequence(enriched, period=16)
 
     # Apply artist spacing: no same artist within 3 consecutive tracks
     sequenced: list[dict] = []
-    remaining = pool[:]
+    remaining = sequenced_arc[:]
     while remaining:
         placed = False
         for i, candidate in enumerate(remaining):
@@ -279,8 +303,7 @@ def _generate_run_of_show(block: str, target_date: date, manifest: dict) -> list
     active_scripts = [s for s in scripts if s["type"] != "track_outro"]
 
     # Identify tracks specifically introduced by track_intro scripts
-    # These must play immediately after their intro and must NOT appear in the general pool.
-    setlist: dict[str, dict] = {}  # (artist.lower, title.lower) → track dict
+    setlist: dict[tuple[str, str], dict] = {}
     for s in active_scripts:
         if s["type"] == "track_intro" and s.get("artist") and s.get("track"):
             key = (s["artist"].lower(), s["track"].lower())
@@ -289,7 +312,7 @@ def _generate_run_of_show(block: str, target_date: date, manifest: dict) -> list
     sequenced = _load_sequenced_tracklist(block, manifest)
     budget = _block_track_budget(block, len(active_scripts))
 
-    # Remove setlist tracks from the general pool so they only play after their intro
+    # Remove setlist tracks from the general pool
     pool = [
         t for t in sequenced
         if (t["artist"].lower(), t["title"].lower()) not in setlist
@@ -307,7 +330,6 @@ def _generate_run_of_show(block: str, target_date: date, manifest: dict) -> list
     # Interleave talk breaks with music
     for script in active_scripts:
         entries.append({"type": "talk", **script})
-        # For track_intro: play the introduced song first, then 2 more from pool
         if script["type"] == "track_intro" and script.get("artist") and script.get("track"):
             entries.append({
                 "type": "music",
@@ -316,7 +338,7 @@ def _generate_run_of_show(block: str, target_date: date, manifest: dict) -> list
                 "path": None,
                 "tags": [],
                 "rating": 0,
-                "energy": 1,
+                "energy": None,
             })
             fill = 2
         else:
@@ -325,6 +347,11 @@ def _generate_run_of_show(block: str, target_date: date, manifest: dict) -> list
             if bumper_idx < len(pool):
                 entries.append({"type": "music", **pool[bumper_idx]})
                 bumper_idx += 1
+
+    # Fill remaining pool tracks for full block coverage
+    while bumper_idx < len(pool):
+        entries.append({"type": "music", **pool[bumper_idx]})
+        bumper_idx += 1
 
     return entries
 
@@ -341,8 +368,22 @@ def _write_block_show_card(block: str, target_date: date, manifest: dict) -> Pat
     scripts = _load_scripts_for_block(target_date, block)
     rendered = sum(1 for s in scripts if s["status"] == "rendered")
     total = len(scripts)
-    full_tracks = _load_full_tracklist(block)
     wav_status = f"{rendered}/{total} rendered" + (" ✓" if rendered == total and total > 0 else "")
+
+    # Pool summary from manifest
+    pool_tracks = manifest.get("pool", [])
+    pool_size = len(pool_tracks)
+    if pool_size == 0:
+        # Fallback to bumpers count
+        full_tracks = _load_full_tracklist(block, manifest)
+        pool_size = len(full_tracks)
+
+    # Top artists by count in pool
+    artist_counts = Counter(
+        t.get("artist", "") for t in pool_tracks
+    )
+    top_artists = ", ".join(f"{a} ({n})" for a, n in artist_counts.most_common(5))
+    pool_summary = f"{pool_size} tracks · {top_artists}" if top_artists else f"{pool_size} tracks"
 
     lines = [
         "---",
@@ -352,7 +393,7 @@ def _write_block_show_card(block: str, target_date: date, manifest: dict) -> Pat
         "---",
         "",
         f"# {label} — {target_date.strftime('%A, %B %-d, %Y')}",
-        f"{time_str} · {len(full_tracks)} tracks in pool · {total} breaks · {wav_status}",
+        f"{time_str} · {pool_summary} · {total} breaks · {wav_status}",
         "",
     ]
 
@@ -408,20 +449,6 @@ def _write_block_show_card(block: str, target_date: date, manifest: dict) -> Pat
             lines.append(f"- {status_icon} `{s['seq']:02d}` {seg_label}{track_note}{preview}")
         lines.append("")
 
-    # Full library appendix
-    if full_tracks:
-        lines.append(f"## Full Library ({len(full_tracks)} tracks)")
-        lines.append("")
-        current_artist = None
-        for artist, title, _ in full_tracks:
-            if artist != current_artist:
-                if current_artist is not None:
-                    lines.append("")
-                lines.append(f"**{artist}**")
-                current_artist = artist
-            lines.append(f"- {title}" if title else "- _(unknown title)_")
-        lines.append("")
-
     output_path.write_text("\n".join(lines) + "\n", encoding="utf-8")
     return output_path
 
@@ -475,10 +502,11 @@ def generate_show_card(target_date: date) -> Path:
             scripts = _load_scripts_for_block(target_date, block)
             rendered = sum(1 for s in scripts if s["status"] == "rendered")
             total = len(scripts)
-            full_tracks = _load_full_tracklist(block)
+            pool_tracks = manifests[block].get("pool", [])
+            pool_count = len(pool_tracks) if pool_tracks else len(_load_full_tracklist(block, manifests[block]))
             wav_cell = f"{rendered}/{total}" + (" ✓" if rendered == total and total > 0 else "")
             link = f"[[{target_date.isoformat()}-{slug}\\|{label}]]"
-            index_lines.append(f"| {link} | {time_str} | {len(full_tracks)} | {total} | {wav_cell} |")
+            index_lines.append(f"| {link} | {time_str} | {pool_count} | {total} | {wav_cell} |")
 
     index_path.write_text("\n".join(index_lines) + "\n", encoding="utf-8")
     print(f"[show_card_gen] index → {index_path}")

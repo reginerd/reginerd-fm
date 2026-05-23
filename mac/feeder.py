@@ -633,6 +633,7 @@ def run():
     last_check = 0
     last_rebuild_check = 0
     startup_sweep_done = False
+    initial_startup = True  # skip SIGHUP on first show detection (playlist already built)
 
     # Seed last_recorded_track so a feeder restart doesn't double-record the in-flight track
     try:
@@ -663,7 +664,9 @@ def run():
             playlist_entries = build_playlist(current_show_id, current_slot)
             last_talk_set = {p.name for p in get_talk_segments(current_show_id, current_slot)}
             write_playlist(playlist_entries)
-            signal_ezstream_reload()
+            if not initial_startup:
+                signal_ezstream_reload()
+            initial_startup = False
             log(f"  Playlist: {len(playlist_entries)} tracks")
             for e in playlist_entries:
                 log(f"    [{e['type']}] {e['name']}")
@@ -848,13 +851,23 @@ def write_ezstream_config() -> Path:
       <program>ffmpeg -v quiet -i @T@ -af loudnorm=I=-16:TP=-1.5:LRA=11,afade=t=in:st=0:d=3,aresample=44100 -f s16le -acodec pcm_s16le -ar 44100 -ac 2 -</program>
       <file_ext>.flac</file_ext>
     </decoder>
+    <decoder>
+      <name>ffmpeg-mp3</name>
+      <program>ffmpeg -v quiet -i @T@ -af loudnorm=I=-16:TP=-1.5:LRA=11,aresample=44100 -f s16le -acodec pcm_s16le -ar 44100 -ac 2 -</program>
+      <file_ext>.mp3</file_ext>
+    </decoder>
+    <decoder>
+      <name>ffmpeg-m4a</name>
+      <program>ffmpeg -v quiet -i @T@ -af loudnorm=I=-16:TP=-1.5:LRA=11,aresample=44100 -f s16le -acodec pcm_s16le -ar 44100 -ac 2 -</program>
+      <file_ext>.m4a</file_ext>
+    </decoder>
   </decoders>
 
   <encoders>
     <encoder>
       <name>oggenc-q8</name>
       <format>Ogg</format>
-      <program>oggenc -r -B 16 -C 2 -R 44100 --raw-endianness 0 -q 8 -t @M@ -</program>
+      <program>oggenc -r -B 16 -C 2 -R 44100 --raw-endianness 0 -q 9 -t @M@ -</program>
     </encoder>
   </encoders>
 </ezstream>

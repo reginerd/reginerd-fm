@@ -1,0 +1,67 @@
+{
+  "station_id": "rgnrd-fm",
+  "call_sign": "REGINERD-FM",
+  "updated_at": "2026-05-19T21:28:12",
+  "topics": {
+    "night_philosophy": [
+      "Late-night crate digging rituals — the specific quiet of 2am when the finds hit different",
+      "Miles Davis Kind of Blue as sonic architecture — why the space between notes defined an era",
+      "The Bay Area's fog as a mood — how weather shaped the region's slower, heavier music",
+      "Aphex Twin Selected Ambient Works Vol 2 — music designed for the hour between awake and asleep",
+      "J Dilla's Donuts as a late-night listen — the album that loops and breathes like a dream",
+      "Blue Note after midnight — the specific gravity of Coltrane and Monk when the room finally goes quiet",
+      "Ennio Morricone and American loneliness — how a Roman composer redefined what the West sounded like",
+      "The 4am hour in music — songs built for the window between last call and first light",
+      "Nina Simone's late-period recordings — what exile and age added to a voice that already had everything",
+      "Harold Bueno Ambient 1 Music for Airports — intentional boredom as the most radical move in electronic music"
+    ],
+    "rap": [
+      "E-40 and Vallejo slang — how one rapper's vocabulary became Bay Area lingua franca",
+      "Mac Dre's hyphy movement — the Vallejo sound that moved the Bay before anyone was ready for it",
+      "Hieroglyphics crew and the Oakland alternative rap lane — the indie label story no one talks about enough",
+      "Tupac's pre-Death Row recordings — how his early Interscope work showed a completely different trajectory",
+      "The Slauson Swap Meet as a West Coast rap incubator — how LA's underground market scene fed the music",
+      "Too $hort and Oakland's pimping narrative — the Bay Area moral ambiguity that made him a legend before rap went mainstream",
+      "The Neptunes' production monopoly 2001–2004 — Pharrell and Chad Hugo's sonic grip on an era and why it still sounds futuristic",
+      "Kendrick Lamar's Section.80 vs. good kid, m.A.A.d city — the two-album arc that built the Compton canon",
+      "DJ Quik and the Compton G-funk sound — the underrated producer-rapper who defined West Coast before Dre did",
+      "Freestyle Fellowship and Good Life Café — the LA underground that existed parallel to gangsta rap and got none of the credit"
+    ],
+    "soul_music": [
+      "Ann Peebles 'I Can't Stand the Rain' — the Hi Records session that outlasted its entire era",
+      "Al Green's Memphis sound — Willie Mitchell's production approach and why it still sounds like nothing else",
+      "Sharon Jones and the Dap-Kings — playing vintage soul in the digital era as a political act",
+      "Bobby Womack's Across 110th Street — a movie soundtrack that became the template for gritty soul",
+      "The Chi-Lites and Chicago soul — the soft masculinity that made 'Oh Girl' a different kind of love song",
+      "Curtis Mayfield's Superfly — the soundtrack-as-political-document that made blaxploitation era films meaningful",
+      "Marvin Gaye's What's Going On — the concept album gamble that rescued his career and changed Motown's direction",
+      "The Staple Singers and gospel-soul crossover — Mavis Staples' voice as a weapon of social change",
+      "Bill Withers in Muscle Shoals — the Alabama session that gave California soul its backbone",
+      "Minnie Riperton's Adventures in Paradise — what the full album reveals about a vocalist who got reduced to one note"
+    ],
+    "vgm": [
+      "Yasunori Mitsuda's Chrono Trigger score — how a debut composer accidentally wrote the definitive JRPG OST",
+      "The Earthbound/Mother series soundscapes — Keiichi Suzuki's outsider approach to game music",
+      "Final Fantasy VI opera scene — when game music reached for something it had no right to attempt",
+      "Grant Kirkhope and Rare's N64 era — the jingle-based approach to world-building in Banjo-Kazooie",
+      "Yoko Shimomura's Street Fighter II soundtrack — how fighting game music became its own genre",
+      "Akira Yamaoka's Silent Hill 2 score — industrial ambient and acoustic guitar as a blueprint for psychological horror",
+      "Yuzo Koshiro's Streets of Rage 2 — techno before techno, written for hardware that shouldn't have been capable of it",
+      "Nobuo Uematsu's One-Winged Angel — how FFVII's final boss theme turned orchestral game music into a cultural event",
+      "Toby Fox's Undertale OST — bedroom production on Game Maker becoming one of the most recognized VGM canons",
+      "Darren Korb's Hades score — how genre mashup (Balkan folk meets metal) built an entire mythological world"
+    ],
+    "music_history": [
+      "Chess Records and the electric blues migration — how a Chicago label changed American music forever",
+      "The Motown assembly line — how Berry Gordy's factory model manufactured Black excellence",
+      "Stax vs Motown — the Memphis/Detroit rivalry that defined the soul/R&B split of the 1960s",
+      "The 1977 New York blackout and hip-hop — how one night of looting changed music history",
+      "Sun Ra's Arkestra and AACM — the Chicago avant-garde underground that pre-dated everything",
+      "Def Jam Records born in a NYU dorm — Russell Simmons and Rick Rubin's first three years and how they invented the major-label rap template",
+      "Cassette culture and home dubbing — the format the industry feared and how it created the hip-hop mixtape tradition",
+      "Prince's Purple Rain recording sessions — how a total artistic vision forced Warner Bros to bet everything on an unproven auteur",
+      "The 1977 New York blackout and turntablism — how one night of looting became the mythology origin story of hip-hop's gear",
+      "Sun Records and the rockabilly moment — Sam Phillips, the Sun Studio tape machine, and the twelve months that changed popular music"
+    ]
+  }
+}

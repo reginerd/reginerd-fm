@@ -76,9 +76,6 @@ def render_speech(
 
     # Build the TTS script
     tts_script = f'''
-import os
-os.environ["HF_HUB_OFFLINE"] = "1"
-os.environ["TRANSFORMERS_OFFLINE"] = "1"
 import warnings
 warnings.filterwarnings("ignore")
 
@@ -112,14 +109,12 @@ print("SUCCESS")
 '''
 
     try:
-        env = {**os.environ, "HF_HUB_OFFLINE": "1", "TRANSFORMERS_OFFLINE": "1"}
         result = subprocess.run(
             [str(VENV_PYTHON), "-c", tts_script],
             capture_output=True,
             text=True,
             timeout=300,  # 5 minutes max (Kokoro is fast)
             cwd=str(KOKORO_DIR),
-            env=env,
         )
         if "SUCCESS" in result.stdout:
             return True

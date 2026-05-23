@@ -3,20 +3,70 @@
 # blocked_artists: case-insensitive match against Plex grandparentTitle.
 #   Include name variants — Plex may differ from what you expect.
 #
-# lastfm_tags.allowed: artist must have ≥1 of these Last.fm tags (--use-tags only).
-#   If omitted or empty, no allowed-tag requirement is enforced.
-# lastfm_tags.blocked: artist must have 0 of these tags (--use-tags only).
-#   blocked check runs before allowed — a blocked tag always excludes.
+# lastfm_tags.blocked: artist must have 0 of these tags — hard exclude.
 #   Fail-open: if Last.fm returns no tags for an artist, the track is included.
+#
+# boost_tags: Last.fm tags that add score bonus during curator selection.
+#   Replaces the old lastfm_tags.allowed hard filter — tracks with matching
+#   tags score higher but tracks without are still eligible.
+#
+# pool_size: max tracks to include in the vibe-matched pool written to manifest.
 
 morning:
   segments: [show_intro, track_intro, music_essay, track_intro, show_outro]
+  bpm_range: [55, 105]
+  energy_max: 0.05
+  pool_size: 400
+  boost_tags:
+    - soul
+    - r&b
+    - neo-soul
+    - jazz
+    - gospel
+    - smooth
+    - rnb
+    - female vocalists
+    - male vocalists
 
 late_night:
   segments: [show_intro, track_intro, show_outro]
+  bpm_range: [50, 115]
+  energy_max: 0.18
+  pool_size: 200
+  lastfm_tags:
+    blocked:
+      - rap
+      - hip-hop
+      - trap
+      - drill
+      - gangsta rap
+      - dubstep
+      - edm
+      - dance
+  boost_tags:
+    - ambient
+    - instrumental
+    - jazz
+    - soul
+    - funk
+    - cinematic
+    - soundtrack
+    - video game
+    - post-rock
+    - atmospheric
+    - chillout
+    - space music
+    - trip-hop
+    - neo-soul
+    - psychedelic soul
+    - chicago soul
+    - psychedelic
 
 wind_down:
   segments: [show_intro, track_intro, track_intro, show_outro]
+  bpm_range: [50, 95]
+  energy_max: 0.04
+  pool_size: 200
   blocked_artists:
     - Rusko
     - Diplo
@@ -25,43 +75,78 @@ wind_down:
     - Ye
     - Kanye West
   lastfm_tags:
-    allowed:
-      - ambient
-      - post-rock
-      - atmospheric
-      - chillout
-      - instrumental
-      - drone
-      - space music
-      - electronica
-      - jazz
-      - easy listening
-      - trip-hop
-      - new age
     blocked:
       - dubstep
       - edm
       - dance
       - party
       - rap
+  boost_tags:
+    - ambient
+    - post-rock
+    - atmospheric
+    - chillout
+    - instrumental
+    - drone
+    - space music
+    - electronica
+    - jazz
+    - easy listening
+    - trip-hop
+    - new age
 
 midday:
   segments: [show_intro, track_intro, track_intro, show_outro]
+  bpm_range: [70, 120]
+  energy_max: 0.06
+  pool_size: 300
   blocked_artists:
     - Snoop Dogg
   lastfm_tags:
     blocked:
       - rap
       - hip-hop
+  boost_tags:
+    - pop
+    - rock
+    - folk
+    - singer-songwriter
+    - indie
+    - reggae
+    - alternative
+    - country
 
 prime_time:
   segments: [show_intro, track_intro, deep_dive, track_intro, music_essay, track_intro, show_outro]
-  lastfm_tags:
-    allowed:
-      - rap
-      - hip-hop
-      - r&b
-      - soul
-      - trap
-      - west coast rap
-      - east coast rap
+  bpm_range: [80, 145]
+  energy_min: 0.015
+  pool_size: 600
+  favorite_artists:
+    - Kendrick Lamar
+    - Tyler, The Creator
+    - Kanye West
+    - Ye
+    - Young Dolph
+    - J. Cole
+    - Frank Ocean
+    - ScHoolboy Q
+    - Isaiah Rashad
+    - Vince Staples
+    - Freddie Gibbs
+    - Pusha T
+    - Jay-Z
+    - Nas
+    - Wu-Tang Clan
+    - GZA
+    - Ghostface Killah
+  boost_tags:
+    - rap
+    - hip-hop
+    - trap
+    - west coast rap
+    - east coast rap
+    - gangsta rap
+    - conscious hip-hop
+    - dirty south
+    - r&b
+    - soul

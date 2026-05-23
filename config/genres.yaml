@@ -1,5 +1,10 @@
-# RGNRD-FM Genre → Show Block Mapping
-# Maps each show block to the Plex genres it should pull from.
+# DEPRECATED: Genre-based pool stocking replaced by vibe profiles in blocks.yaml
+# and the music_indexer.py flat library index.
+# This file is no longer read by curator.py or orchestrator.py.
+# Kept for reference only.
+#
+# RGNRD-FM Genre → Show Block Mapping (historical)
+# Maps each show block to the Plex genres it used to pull from.
 # Genre names must match exactly what's in your Plex library (case-sensitive).
 #
 # To see available genres: uv run python mac/plex_music_feeder.py --genres
