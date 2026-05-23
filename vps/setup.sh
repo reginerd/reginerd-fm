@@ -2,8 +2,8 @@
 set -e
 
 DOMAIN="stream.reginerd.tv"
-SOURCE_PASSWORD="rgnrd_source_2024"
-ADMIN_PASSWORD="rgnrd_admin_$(openssl rand -hex 8)"
+SOURCE_PASSWORD="${RGNRD_SOURCE_PASSWORD:-$(openssl rand -hex 16)}"
+ADMIN_PASSWORD="$(openssl rand -hex 12)"
 SOURCE_URL="https://radio.reginerd.tv/stream"
 EMAIL="reggie@reginerd.tv"
 
@@ -155,7 +155,9 @@ echo ""
 echo "✅ Done!"
 echo "   Ogg:  https://$DOMAIN/stream"
 echo "   AAC:  https://$DOMAIN/stream.aac"
-echo "   Admin password saved: $ADMIN_PASSWORD"
+echo "   Source password: $SOURCE_PASSWORD"
+echo "   Admin password:  $ADMIN_PASSWORD"
+echo "   ⚠️  Save these — they won't be shown again."
 echo ""
 echo "Check status:"
 echo "   systemctl status rgnrd-relay rgnrd-aac icecast2"
