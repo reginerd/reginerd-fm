@@ -2,17 +2,20 @@
 
 24/7 internet radio powered by reginerd's actual Plex music library. One DJ. Five blocks. All day.
 
-**Live at:** [radio.reginerd.tv](https://radio.reginerd.tv/stream)
+**Listen at:** [radio.reginerd.tv](https://radio.reginerd.tv)
 
-Forked from [WRIT-FM](https://github.com/keltokhy/writ-fm). Key differences: music comes from a real Plex library on a NAS (not AI-generated), and there's one DJ persona (reginerd) instead of multiple hosts.
+Forked from [WRIT-FM](https://github.com/keltokhy/writ-fm). Key differences: music comes from a real Plex library on a NAS (not AI-generated), track selection is vibe-scored (not genre-gated), and there's one DJ persona instead of multiple hosts.
 
 ## Stack
 
 | Component | Tech |
 |-----------|------|
-| Music source | Plex on DS220+ NAS → `mac/plex_music_feeder.py` |
+| Music source | Plex on DS220+ NAS → `mac/music_indexer.py` |
 | Streaming | Icecast + ezstream on Mac Studio |
-| Public URL | Cloudflare Tunnel → radio.reginerd.tv |
+| Relay / CDN | DigitalOcean VPS → Icecast2 → `stream.reginerd.tv` (Ogg + AAC) |
+| Public URL | Cloudflare Tunnel → `radio.reginerd.tv` (player + API) |
+| Web player | React/Vite SPA — album art, lyrics flip, AirPlay, lock screen |
+| Player API | FastAPI on port 8090 (`mac/web_player_server.py`) |
 | DJ voice | ElevenLabs Professional Voice Clone (Reggie's voice) |
 | Script generation | Qwen14B via Hermes (local, Mac Studio) |
 | Play tracking | SQLite play history + no-repeat window |
@@ -20,15 +23,17 @@ Forked from [WRIT-FM](https://github.com/keltokhy/writ-fm). Key differences: mus
 
 ## Schedule (Weekday)
 
-| Block | Time | Genres |
-|-------|------|--------|
+| Block | Time | Vibe |
+|-------|------|------|
 | Morning | 6am–10am | R&B, Easy Listening, Jazz, Vocal |
 | Midday | 10am–3pm | Pop/Rock, Reggae, Folk, Electronic |
 | Prime Time | 3pm–8pm | Rap, R&B |
-| Wind Down | 8pm–10pm | Jazz, Easy Listening, Electronic |
-| Late Night | 10pm–6am | Stage & Screen (VGM + film scores) |
+| Wind Down | 8pm–10pm | Mellow, atmospheric, easy BPM |
+| Late Night | 10pm–6am | Ambient, instrumental, VGM, film scores |
 
 Friday extends Prime Time to 10pm. Saturday adds Sabbath Morning (Gospel, 6–10am). See `config/schedule.yaml` for the full definition.
+
+Block pools are built from vibe profiles (`config/blocks.yaml`) — BPM range, energy ceiling, brightness range, and boost tags — scored against the full library index. No genre gating.
 
 ## Build Status
 
@@ -39,6 +44,9 @@ Friday extends Prime Time to 10pm. Saturday adds Sabbath Morning (Gospel, 6–10
 - [x] Phase 4 — Talk Generation (code done)
 - [x] Phase 5 — Content Pipeline (no-repeat, day-of-week, orchestrator)
 - [x] Phase 5.5 — Show Cards + Intelligent Sequencing
+- [x] Phase 5.6 — Web Player (lyrics, AirPlay, lock screen, tap-to-tune)
+- [x] Phase 5.7 — VPS Relay + Safari AAC stream
+- [x] Phase 5.8 — Vibe-based library index (replaces genre gating)
 - [ ] Phase 6 — Launch (QA → 24hr test → soft launch)
 
 **Remaining manual steps:** record voice samples (REG-124) → clone voice on ElevenLabs (REG-128) → QA talk breaks (REG-115) → 24hr stability run (REG-166).
@@ -61,16 +69,22 @@ cp mac/config.yaml.example mac/config.yaml
 
 Icecast config lives in `config/icecast.xml` (already configured on Mac Studio).
 
-### 3. Stock music from Plex
+### 3. Index the music library
 
 ```bash
-# Sync entire library (no limits — run whenever you add music to Plex)
 set -a && source .env && set +a
-uv run python mac/plex_music_feeder.py --all --full
 
-# Check queue status
-uv run python mac/plex_music_feeder.py --status
+# Incremental — only analyzes new/changed tracks
+uv run python mac/music_indexer.py
+
+# Force full reanalysis
+uv run python mac/music_indexer.py --force
+
+# Dry run — report counts without writing
+uv run python mac/music_indexer.py --dry-run
 ```
+
+Output: `output/runtime/music_library.json` — all Plex tracks with BPM, energy, brightness, Last.fm tags.
 
 ### 4. Start the stream
 
@@ -93,11 +107,24 @@ set -a && source .env && set +a
 uv run python mac/feeder.py --station rgnrd-fm --start-ezstream
 ```
 
+### 5. Start the web player server
+
+```bash
+set -a && source .env && set +a
+uv run python mac/web_player_server.py
+# Serves at http://localhost:8090 — Cloudflare Tunnel exposes it at radio.reginerd.tv
+```
+
+The player build is pre-committed at `output/player/`. To rebuild after editing `player/src/`:
+
+```bash
+cd player && npm install && npm run build
+# Output goes to ../output/player/
+```
+
 ## Operations
 
 ### Force playlist refresh
-
-When you add tracks or want fresh songs immediately — no restart needed:
 
 ```bash
 kill -USR1 $(pgrep -f "feeder.py")
@@ -113,25 +140,28 @@ uv run python mac/play_history.py most_played  # repeat offenders
 
 ### No-repeat logic
 
-- Tracks played in the last 4 hours are filtered out of the next playlist build
-- If the entire pool has been played recently, the least-recently-played tracks come first (LRU order)
-- Adjust the window: `RGNRD_BUMPER_REPEAT_HOURS=6 uv run python mac/feeder.py ...`
+Tracks played in the last 4 hours are filtered from the next playlist build. If the entire pool has been played recently, the least-recently-played tracks come first (LRU order).
+
+```bash
+RGNRD_BUMPER_REPEAT_HOURS=6 uv run python mac/feeder.py ...
+```
 
 ## Content Pipeline (Talk Generation)
 
-The nightly orchestrator agent (`mac/agents/orchestrator.py`) runs the full pipeline at 2am:
+The nightly orchestrator (`mac/agents/orchestrator.py`) runs at 2am:
 
 ```
-Curator → Researcher → Scriptwriter → Narrator → Show Card Gen
+music_indexer → curator → researcher → scriptwriter → narrator → show_card_gen
 ```
 
-- **Curator** — selects featured artist per block, writes `output/manifests/{block}_{date}.json`
-- **Researcher** — pulls Last.fm bio, discography, and tag context for the featured artist
-- **Scriptwriter** — writes DJ break scripts via Qwen14B; outputs MP3 filenames + `setlist.json`
-- **Narrator** — renders scripts to MP3 via ElevenLabs; caches reusable track intros in `output/tts_cache/`
-- **Show Card Gen** — writes per-block Obsidian show cards + `output/playlists/{block}_{date}.json`
+- **music_indexer** — indexes all Plex tracks; saves BPM/energy/brightness + Last.fm tags to `music_library.json`
+- **curator** — scores library against block vibe profiles; selects featured artist; writes manifest + pool
+- **researcher** — pulls Last.fm bio, discography, and tag context for the featured artist
+- **scriptwriter** — writes DJ break scripts via Qwen14B; outputs MP3 filenames + `setlist.json`
+- **narrator** — renders scripts to MP3 via ElevenLabs; caches reusable track intros
+- **show_card_gen** — writes Obsidian show cards + `output/playlists/{block}_{date}.json`
 
-Dry run to validate:
+Dry run:
 ```bash
 uv run python mac/agents/orchestrator.py --dry-run
 ```
@@ -141,46 +171,69 @@ Generate show cards for a specific date:
 uv run python mac/agents/show_card_gen.py --date 2026-05-21
 ```
 
-Talk breaks require a working ElevenLabs voice_id in `mac/config.yaml`. Until the voice clone is ready, use any ElevenLabs voice ID for testing.
+## Web Player
 
-## Show Cards
+The player at `radio.reginerd.tv` is a React SPA served by the FastAPI backend.
 
-Each night the pipeline drops Obsidian show cards into `~/life-os/life-os/Projects/reginerd.fm/Show Cards/YYYY-MM-DD/`:
+**Features:**
+- Tap-to-tune-in overlay (browser autoplay policy workaround)
+- Album art with blurred background
+- Tap art to flip to synced/plain lyrics (3D CSS card flip)
+- Auto-scrolling synced lyrics keyed to audio position
+- Lock screen / notification shade metadata (Media Session API)
+- AirPlay button on Safari/WebKit (throws stream to HomePod/Apple TV)
+- Thumbs up/down voting (stored in `~/.rgnrd/votes.db`)
+- Star rating from Plex, play count from station history
+- Net votes badge
 
-- `YYYY-MM-DD.md` — daily index with wikilinked table of all blocks
-- `YYYY-MM-DD-morning.md` etc. — one file per block with:
-  - **Run of Show** — exact numbered sequence of music + DJ breaks
-  - **Breaks** — rendered/pending status per segment
-  - **Full Library** — all tracks in pool, grouped by artist
+**Stream sources** (in priority order for the `<audio>` element):
+1. `https://stream.reginerd.tv/stream.aac` — AAC 128k (Safari compatible)
+2. `https://stream.reginerd.tv/stream` — Ogg/Vorbis
 
-The feeder reads `output/playlists/{block}_{date}.json` (written by show card gen) to follow the exact show card order, keeping stream and card in sync.
+## VPS Relay (`stream.reginerd.tv`)
 
-## Sequencing
+A DigitalOcean droplet relays the stream so the home Mac only serves one upstream connection. Listeners hit the VPS directly.
 
-Tracks are ordered using an energy arc (low → medium → high → medium → low) derived from Last.fm genre tags, with priority artists (Ye, Kendrick Lamar, Young Dolph, Key Glock, Tyler the Creator) boosted throughout. Artist spacing prevents the same artist from playing in consecutive slots.
-
-Optional BPM/energy analysis via librosa (install with `uv add librosa`):
-```bash
-uv run python mac/content_generator/audio_features.py --all --librosa
 ```
+Mac Studio (Icecast :8000)
+  └── Cloudflare Tunnel → radio.reginerd.tv/stream (one connection)
+        └── ffmpeg relay (rgnrd-relay.service)
+              └── Icecast on VPS :8000/stream  (Ogg)
+                    └── ffmpeg transcode (rgnrd-aac.service)
+                          └── Icecast on VPS :8000/stream.aac  (AAC 128k)
+                                └── Nginx + Let's Encrypt → stream.reginerd.tv
+```
+
+Setup script: `vps/setup.sh`
 
 ## Architecture
 
 ```
-Plex NAS (DS220+)
-  └── plex_music_feeder.py ──symlinks──► output/music_bumpers/{block}/
+music_indexer.py ──► output/runtime/music_library.json
+
+curator.py
+  ├── scores library against block vibe profiles
+  ├── writes output/manifests/{block}_{date}.json  (featured + pool)
+  └── refreshes output/music_bumpers/{block}/  (symlinks)
 
 feeder.py (launchd daemon)
-  ├── reads output/playlists/{block}_{date}.json (show card order)
-  ├── filters play history (4hr no-repeat window, LRU fallback)
-  ├── queues setlist-matched track after each track_intro break
+  ├── reads output/playlists/{block}_{date}.json
+  ├── filters play history (4hr no-repeat, LRU fallback)
   ├── writes output/runtime/.playlist.m3u
   └── signals ezstream (SIGHUP) on rebuild
 
 ezstream ──► Icecast :8000/stream ──► Cloudflare Tunnel ──► radio.reginerd.tv
+                                  └── VPS relay ──► stream.reginerd.tv (Ogg + AAC)
+
+web_player_server.py (FastAPI :8090, Cloudflare Tunnel)
+  ├── GET /now-playing — current track metadata + votes + play count
+  ├── GET /art        — Plex album art proxy (hides token)
+  ├── GET /lyrics     — LRClib lyrics (synced + plain)
+  ├── POST /vote      — thumbs up/down → votes.db
+  └── /*              — serves output/player/ (React SPA)
 
 orchestrator.py (launchd, nightly 2am)
-  └── curator → researcher → scriptwriter → narrator → show_card_gen
+  └── music_indexer → curator → researcher → scriptwriter → narrator → show_card_gen
 ```
 
 ## Key Files
@@ -188,18 +241,20 @@ orchestrator.py (launchd, nightly 2am)
 | File | Purpose |
 |------|---------|
 | `mac/feeder.py` | Playlist daemon — core of the stream |
-| `mac/plex_music_feeder.py` | Populate bumper dirs from Plex by genre |
+| `mac/music_indexer.py` | Index full Plex library with Librosa + Last.fm tags |
+| `mac/audio_analyzer.py` | BPM / energy / brightness analysis (Librosa) |
+| `mac/web_player_server.py` | FastAPI: now-playing, art proxy, lyrics, votes, SPA |
 | `mac/play_history.py` | SQLite play tracker + no-repeat logic |
-| `mac/agents/orchestrator.py` | Nightly talk generation pipeline |
-| `mac/agents/curator.py` | Featured artist selection per block |
+| `mac/agents/orchestrator.py` | Nightly pipeline runner |
+| `mac/agents/curator.py` | Vibe scoring + featured artist selection |
 | `mac/agents/researcher.py` | Last.fm bio + discography context |
 | `mac/agents/scriptwriter.py` | Qwen14B DJ script generation + setlist.json |
 | `mac/agents/narrator.py` | ElevenLabs TTS → MP3 + TTS cache |
 | `mac/agents/show_card_gen.py` | Obsidian show cards + playlist JSON |
-| `mac/content_generator/audio_features.py` | Duration + BPM/energy cache (mutagen + librosa) |
-| `mac/launchd/local.rgnrd.feeder.plist` | launchd daemon for feeder |
-| `mac/launchd/local.rgnrd.nightly.plist` | launchd daemon for nightly batch |
-| `config/persona.yaml` | reginerd base DJ persona prompt |
-| `config/blocks.yaml` | Per-block context overlays |
+| `mac/health_monitor.sh` | Process health checks + alerting |
+| `player/src/App.tsx` | React web player source |
+| `output/player/` | Pre-built player (served by web_player_server) |
+| `vps/setup.sh` | DigitalOcean relay VPS setup script |
+| `config/persona.yaml` | reginerd DJ persona prompt |
+| `config/blocks.yaml` | Per-block vibe profiles (BPM, energy, tags) |
 | `config/schedule.yaml` | Full 7-day schedule |
-| `config/genres.yaml` | Show → Plex genre mapping |
